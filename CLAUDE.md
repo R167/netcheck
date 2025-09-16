@@ -145,3 +145,5 @@ Create a comprehensive network gateway security assessment tool that can:
 - Error handling patterns are essential for robust tools
 
 This project demonstrates effective use of Go for network security tools and showcases modern router service discovery techniques.
+- When buildling new checks, always put them in their own files, not main.go
+- always commit and push before changing branches
