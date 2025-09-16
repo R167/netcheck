@@ -8,12 +8,34 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// Severity levels for security issues
+const (
+	SeverityCritical = "CRITICAL"
+	SeverityHigh     = "HIGH"
+	SeverityMedium   = "MEDIUM"
+	SeverityLow      = "LOW"
+)
+
+// Common timeouts
+const (
+	HTTPTimeout   = 5 * time.Second
+	PortTimeout   = 2 * time.Second
+	NATpmpTimeout = 3 * time.Second
+)
+
+// severityOrder defines the priority order for security issues
+var severityOrder = map[string]int{
+	SeverityCritical: 0,
+	SeverityHigh:     1,
+	SeverityMedium:   2,
+	SeverityLow:      3,
+}
 
 type SecurityIssue struct {
 	Severity    string
@@ -72,61 +94,6 @@ type MDNSService struct {
 	TXTData  []string
 }
 
-type DefaultCred struct {
-	Username string
-	Password string
-}
-
-var defaultCredentials = map[string][]DefaultCred{
-	"linksys": {
-		{Username: "admin", Password: "admin"},
-		{Username: "", Password: "admin"},
-		{Username: "admin", Password: ""},
-	},
-	"netgear": {
-		{Username: "admin", Password: "password"},
-		{Username: "admin", Password: "admin"},
-		{Username: "admin", Password: "1234"},
-	},
-	"dlink": {
-		{Username: "admin", Password: ""},
-		{Username: "admin", Password: "admin"},
-		{Username: "user", Password: ""},
-	},
-	"tplink": {
-		{Username: "admin", Password: "admin"},
-		{Username: "admin", Password: "password"},
-	},
-	"asus": {
-		{Username: "admin", Password: "admin"},
-		{Username: "admin", Password: "password"},
-	},
-	"cisco": {
-		{Username: "admin", Password: "admin"},
-		{Username: "cisco", Password: "cisco"},
-		{Username: "admin", Password: "password"},
-	},
-	"belkin": {
-		{Username: "", Password: ""},
-		{Username: "admin", Password: ""},
-		{Username: "admin", Password: "admin"},
-	},
-	"motorola": {
-		{Username: "admin", Password: "motorola"},
-		{Username: "admin", Password: "admin"},
-	},
-}
-
-var vendorPatterns = map[string]*regexp.Regexp{
-	"linksys":  regexp.MustCompile(`(?i)linksys|smart\s*wi-fi`),
-	"netgear":  regexp.MustCompile(`(?i)netgear|genie`),
-	"dlink":    regexp.MustCompile(`(?i)d-link|dir-\d+`),
-	"tplink":   regexp.MustCompile(`(?i)tp-link|tl-\w+`),
-	"asus":     regexp.MustCompile(`(?i)asus|rt-\w+`),
-	"cisco":    regexp.MustCompile(`(?i)cisco|linksys`),
-	"belkin":   regexp.MustCompile(`(?i)belkin|play max`),
-	"motorola": regexp.MustCompile(`(?i)motorola|surfboard`),
-}
 
 var (
 	mdnsFlag = flag.Bool("mdns", false, "Perform comprehensive mDNS service discovery")
@@ -186,7 +153,7 @@ func checkWebInterface(router *RouterInfo) {
 	fmt.Println("🔍 Checking web interface...")
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: HTTPTimeout,
 	}
 
 	urls := []string{
@@ -230,8 +197,7 @@ func detectVendor(router *RouterInfo, content string) {
 		}
 	}
 
-	titleRegex := regexp.MustCompile(`<title[^>]*>([^<]+)</title>`)
-	if matches := titleRegex.FindStringSubmatch(content); len(matches) > 1 {
+	if matches := titlePattern.FindStringSubmatch(content); len(matches) > 1 {
 		title := strings.TrimSpace(matches[1])
 		if router.Vendor == "" && title != "" {
 			fmt.Printf("  📄 Page title: %s\n", title)
@@ -240,21 +206,11 @@ func detectVendor(router *RouterInfo, content string) {
 }
 
 func checkDefaultPage(router *RouterInfo, content, url string) {
-	defaultPageIndicators := []string{
-		"welcome to your new router",
-		"initial setup",
-		"quick setup wizard",
-		"router configuration",
-		"default password",
-		"change default password",
-		"setup wizard",
-	}
-
 	contentLower := strings.ToLower(content)
 	for _, indicator := range defaultPageIndicators {
 		if strings.Contains(contentLower, indicator) {
 			router.Issues = append(router.Issues, SecurityIssue{
-				Severity:    "HIGH",
+				Severity:    SeverityHigh,
 				Description: "Default setup page detected",
 				Details:     fmt.Sprintf("Router appears to be using default configuration at %s", url),
 			})
@@ -277,14 +233,14 @@ func checkDefaultCredentials(router *RouterInfo, baseURL string) {
 	fmt.Printf("  🔐 Testing default credentials for %s...\n", router.Vendor)
 
 	client := &http.Client{
-		Timeout: 3 * time.Second,
+		Timeout: HTTPTimeout,
 	}
 
 	for _, cred := range creds {
 		if testCredentials(client, baseURL, cred.Username, cred.Password) {
 			router.DefaultCreds = true
 			router.Issues = append(router.Issues, SecurityIssue{
-				Severity:    "CRITICAL",
+				Severity:    SeverityCritical,
 				Description: "Default credentials are active",
 				Details:     fmt.Sprintf("Username: '%s', Password: '%s'", cred.Username, cred.Password),
 			})
@@ -314,6 +270,25 @@ func testCredentials(client *http.Client, baseURL, username, password string) bo
 	return resp.StatusCode == 200
 }
 
+// Common management ports and their security implications
+var managementPorts = map[int]SecurityIssue{
+	22: {
+		Severity:    SeverityMedium,
+		Description: "SSH service exposed",
+		Details:     "SSH is accessible from the network. Ensure strong authentication is configured.",
+	},
+	23: {
+		Severity:    SeverityHigh,
+		Description: "Telnet service exposed",
+		Details:     "Telnet transmits data in plain text. Consider disabling if not needed.",
+	},
+	161: {
+		Severity:    SeverityMedium,
+		Description: "SNMP service exposed",
+		Details:     "SNMP can expose device information. Ensure community strings are changed from defaults.",
+	},
+}
+
 func scanCommonPorts(router *RouterInfo) {
 	fmt.Println("\n🔍 Scanning common management ports...")
 
@@ -324,24 +299,9 @@ func scanCommonPorts(router *RouterInfo) {
 			router.OpenPorts = append(router.OpenPorts, port)
 			fmt.Printf("  ✅ Port %d open\n", port)
 
-			if port == 22 {
-				router.Issues = append(router.Issues, SecurityIssue{
-					Severity:    "MEDIUM",
-					Description: "SSH service exposed",
-					Details:     "SSH is accessible from the network. Ensure strong authentication is configured.",
-				})
-			} else if port == 23 {
-				router.Issues = append(router.Issues, SecurityIssue{
-					Severity:    "HIGH",
-					Description: "Telnet service exposed",
-					Details:     "Telnet transmits data in plain text. Consider disabling if not needed.",
-				})
-			} else if port == 161 {
-				router.Issues = append(router.Issues, SecurityIssue{
-					Severity:    "MEDIUM",
-					Description: "SNMP service exposed",
-					Details:     "SNMP can expose device information. Ensure community strings are changed from defaults.",
-				})
+			// Add security issue if this port has known risks
+			if issue, exists := managementPorts[port]; exists {
+				router.Issues = append(router.Issues, issue)
 			}
 		}
 	}
@@ -352,7 +312,7 @@ func scanCommonPorts(router *RouterInfo) {
 }
 
 func isPortOpen(ip string, port int) bool {
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, strconv.Itoa(port)), 2*time.Second)
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, strconv.Itoa(port)), PortTimeout)
 	if err != nil {
 		return false
 	}
@@ -369,7 +329,7 @@ func checkNATpmp(router *RouterInfo) {
 		fmt.Println("  📡 NAT-PMP service detected")
 
 		router.Issues = append(router.Issues, SecurityIssue{
-			Severity:    "MEDIUM",
+			Severity:    SeverityMedium,
 			Description: "NAT-PMP service is enabled",
 			Details:     "NAT-PMP allows automatic port mapping. Ensure it's properly secured.",
 		})
@@ -388,7 +348,7 @@ func sendNATpmpRequest(gatewayIP string) bool {
 	// NAT-PMP external address request: version=0, opcode=0
 	request := []byte{0, 0}
 
-	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	conn.SetDeadline(time.Now().Add(NATpmpTimeout))
 	_, err = conn.Write(request)
 	if err != nil {
 		return false
@@ -444,7 +404,7 @@ func checkIPv6(router *RouterInfo) {
 			fmt.Println("  📡 Gateway accessible via IPv6")
 
 			router.Issues = append(router.Issues, SecurityIssue{
-				Severity:    "MEDIUM",
+				Severity:    SeverityMedium,
 				Description: "IPv6 is enabled",
 				Details:     "Ensure IPv6 firewall rules are properly configured. IPv6 can bypass IPv4 firewall rules.",
 			})
@@ -470,7 +430,7 @@ func checkIPv6Gateway(gatewayIPv4 string) bool {
 	}
 
 	for _, ipv6 := range ipv6Patterns {
-		conn, err := net.DialTimeout("tcp6", "["+ipv6+"]:80", 2*time.Second)
+		conn, err := net.DialTimeout("tcp6", "["+ipv6+"]:80", PortTimeout)
 		if err == nil {
 			conn.Close()
 			return true
@@ -479,33 +439,36 @@ func checkIPv6Gateway(gatewayIPv4 string) bool {
 	return false
 }
 
+// APIEndpoint represents a router API endpoint with security implications
+type APIEndpoint struct {
+	Path        string
+	Description string
+	Severity    string
+}
+
+// Common router API endpoints
+var routerAPIEndpoints = []APIEndpoint{
+	{"/api/", "Generic API endpoint", SeverityMedium},
+	{"/cgi-bin/", "CGI scripts", SeverityHigh},
+	{"/status.xml", "Status XML", SeverityLow},
+	{"/info.html", "Device info", SeverityLow},
+	{"/system.xml", "System XML", SeverityMedium},
+	{"/wan.xml", "WAN configuration", SeverityMedium},
+	{"/wireless.xml", "Wireless config", SeverityMedium},
+	{"/tr069", "TR-069 management", SeverityHigh},
+	{"/remote/", "Remote management", SeverityHigh},
+	{"/goform/", "Form handlers", SeverityMedium},
+	{"/boaform/", "BOA form handlers", SeverityMedium},
+}
+
 func checkRouterAPIs(router *RouterInfo) {
 	fmt.Println("\n🔍 Checking for exposed APIs and services...")
 
-	client := &http.Client{Timeout: 3 * time.Second}
-
-	// Common router API endpoints
-	apiEndpoints := []struct {
-		path        string
-		description string
-		severity    string
-	}{
-		{"/api/", "Generic API endpoint", "MEDIUM"},
-		{"/cgi-bin/", "CGI scripts", "HIGH"},
-		{"/status.xml", "Status XML", "LOW"},
-		{"/info.html", "Device info", "LOW"},
-		{"/system.xml", "System XML", "MEDIUM"},
-		{"/wan.xml", "WAN configuration", "MEDIUM"},
-		{"/wireless.xml", "Wireless config", "MEDIUM"},
-		{"/tr069", "TR-069 management", "HIGH"},
-		{"/remote/", "Remote management", "HIGH"},
-		{"/goform/", "Form handlers", "MEDIUM"},
-		{"/boaform/", "BOA form handlers", "MEDIUM"},
-	}
+	client := &http.Client{Timeout: HTTPTimeout}
 
 	foundAPIs := 0
-	for _, endpoint := range apiEndpoints {
-		url := fmt.Sprintf("http://%s%s", router.IP, endpoint.path)
+	for _, endpoint := range routerAPIEndpoints {
+		url := fmt.Sprintf("http://%s%s", router.IP, endpoint.Path)
 		resp, err := client.Get(url)
 		if err != nil {
 			continue
@@ -514,13 +477,13 @@ func checkRouterAPIs(router *RouterInfo) {
 
 		if resp.StatusCode == 200 {
 			foundAPIs++
-			fmt.Printf("  🔍 Found: %s (%s)\n", endpoint.path, endpoint.description)
+			fmt.Printf("  🔍 Found: %s (%s)\n", endpoint.Path, endpoint.Description)
 
-			if endpoint.severity == "HIGH" {
+			if endpoint.Severity == SeverityHigh {
 				router.Issues = append(router.Issues, SecurityIssue{
-					Severity:    endpoint.severity,
-					Description: fmt.Sprintf("Exposed %s", endpoint.description),
-					Details:     fmt.Sprintf("Endpoint %s is accessible and may expose sensitive functionality", endpoint.path),
+					Severity:    endpoint.Severity,
+					Description: fmt.Sprintf("Exposed %s", endpoint.Description),
+					Details:     fmt.Sprintf("Endpoint %s is accessible and may expose sensitive functionality", endpoint.Path),
 				})
 			}
 		}
@@ -534,18 +497,18 @@ func checkRouterAPIs(router *RouterInfo) {
 	checkWPS(router)
 }
 
+// Common WPS-related paths
+var wpsPaths = []string{
+	"/wps.html",
+	"/wireless_wps.html",
+	"/wps_setup.html",
+	"/advanced_wireless_wps.html",
+}
+
 func checkWPS(router *RouterInfo) {
 	fmt.Println("\n🔍 Checking WPS configuration...")
 
-	client := &http.Client{Timeout: 3 * time.Second}
-
-	// Common WPS-related paths
-	wpsPaths := []string{
-		"/wps.html",
-		"/wireless_wps.html",
-		"/wps_setup.html",
-		"/advanced_wireless_wps.html",
-	}
+	client := &http.Client{Timeout: HTTPTimeout}
 
 	for _, path := range wpsPaths {
 		url := fmt.Sprintf("http://%s%s", router.IP, path)
@@ -566,7 +529,7 @@ func checkWPS(router *RouterInfo) {
 				fmt.Println("  ⚠️  WPS may be enabled")
 
 				router.Issues = append(router.Issues, SecurityIssue{
-					Severity:    "MEDIUM",
+					Severity:    SeverityMedium,
 					Description: "WPS (WiFi Protected Setup) may be enabled",
 					Details:     "WPS has known security vulnerabilities and should be disabled if not needed.",
 				})
@@ -605,31 +568,70 @@ func generateReport(router *RouterInfo) {
 	fmt.Printf("Open Ports: %v\n", router.OpenPorts)
 	fmt.Printf("Issues Found: %d\n\n", len(router.Issues))
 
+	// Display detailed port mappings if any exist
+	if len(router.PortMappings) > 0 {
+		fmt.Println("\n🔓 Active Port Mappings:")
+		for i, mapping := range router.PortMappings {
+			description := mapping.Description
+			if description == "" {
+				description = "No description"
+			}
+			fmt.Printf("%d. External %s:%d → Internal %s:%d (%s)\n",
+				i+1, "*", mapping.ExternalPort, mapping.InternalIP, mapping.InternalPort, description)
+		}
+		fmt.Println()
+	}
+
+	// Display discovered mDNS services if any exist
+	if len(router.MDNSServices) > 0 {
+		fmt.Println("\n📡 Discovered mDNS Services:")
+		for i, service := range router.MDNSServices {
+			if service.IP != "" && service.Port > 0 {
+				fmt.Printf("%d. %s (%s) at %s:%d\n",
+					i+1, service.Name, service.Type, service.IP, service.Port)
+			} else {
+				fmt.Printf("%d. %s (%s)\n",
+					i+1, service.Name, service.Type)
+			}
+		}
+		fmt.Println()
+	}
+
 	if len(router.Issues) == 0 {
 		fmt.Println("✅ No major security issues detected!")
 		return
 	}
 
 	sort.Slice(router.Issues, func(i, j int) bool {
-		severityOrder := map[string]int{"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
 		return severityOrder[router.Issues[i].Severity] < severityOrder[router.Issues[j].Severity]
 	})
 
 	fmt.Println("🚨 Security Issues:")
 	for i, issue := range router.Issues {
-		emoji := "⚠️"
-		if issue.Severity == "CRITICAL" {
-			emoji = "🚨"
-		} else if issue.Severity == "HIGH" {
-			emoji = "⚠️"
-		} else if issue.Severity == "MEDIUM" {
-			emoji = "🔶"
-		}
-
+		emoji := getEmojiForSeverity(issue.Severity)
 		fmt.Printf("%d. %s [%s] %s\n", i+1, emoji, issue.Severity, issue.Description)
 		fmt.Printf("   %s\n\n", issue.Details)
 	}
 
+	printRecommendations(router)
+}
+
+func getEmojiForSeverity(severity string) string {
+	switch severity {
+	case SeverityCritical:
+		return "🚨"
+	case SeverityHigh:
+		return "⚠️"
+	case SeverityMedium:
+		return "🔶"
+	case SeverityLow:
+		return "ℹ️"
+	default:
+		return "⚠️"
+	}
+}
+
+func printRecommendations(router *RouterInfo) {
 	fmt.Println("💡 Recommendations:")
 	fmt.Println("• Change all default passwords immediately")
 	fmt.Println("• Disable unnecessary services and ports")
