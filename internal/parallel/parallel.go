@@ -2,6 +2,7 @@ package parallel
 
 import (
 	"context"
+	"fmt"
 	"sync"
 )
 
@@ -40,7 +41,8 @@ func (pe *Executor) Execute(name string, fn func(context.Context) error) {
 		// Run the function with context
 		if err := fn(pe.ctx); err != nil {
 			pe.mu.Lock()
-			pe.errors = append(pe.errors, err)
+			// Include the check name in the error for better debugging
+			pe.errors = append(pe.errors, fmt.Errorf("%s: %w", name, err))
 			pe.mu.Unlock()
 		}
 	}()
