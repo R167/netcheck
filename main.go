@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/R167/netcheck/internal/parallel"
 	"github.com/R167/netcheck/starlink"
 )
 
@@ -237,15 +238,15 @@ func getSelectedChecks() []Check {
 
 // runStandaloneChecksParallel runs standalone checks in parallel
 func runStandaloneChecksParallel(ctx context.Context, checks []Check) {
-	executor := NewParallelExecutor(ctx)
+	executor := parallel.NewExecutor(ctx)
 
 	for _, check := range checks {
 		check := check // Capture loop variable
-		executor.Execute(check.Name, func() error {
+		executor.Execute(check.Name, func(execCtx context.Context) error {
 			// Check context before running
 			select {
-			case <-ctx.Done():
-				return ctx.Err()
+			case <-execCtx.Done():
+				return execCtx.Err()
 			default:
 			}
 
@@ -259,18 +260,18 @@ func runStandaloneChecksParallel(ctx context.Context, checks []Check) {
 
 // runRouterChecksParallel runs router-based checks in parallel
 func runRouterChecksParallel(ctx context.Context, router *RouterInfo, checks []Check) {
-	executor := NewParallelExecutor(ctx)
+	executor := parallel.NewExecutor(ctx)
 
 	// Use mutex to protect concurrent access to router struct
 	var mu sync.Mutex
 
 	for _, check := range checks {
 		check := check // Capture loop variable
-		executor.Execute(check.Name, func() error {
+		executor.Execute(check.Name, func(execCtx context.Context) error {
 			// Check context before running
 			select {
-			case <-ctx.Done():
-				return ctx.Err()
+			case <-execCtx.Done():
+				return execCtx.Err()
 			default:
 			}
 

@@ -1,12 +1,12 @@
-package main
+package parallel
 
 import (
 	"context"
 	"sync"
 )
 
-// ParallelExecutor manages parallel execution of checks with cancellation support
-type ParallelExecutor struct {
+// Executor manages parallel execution of checks with cancellation support
+type Executor struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -14,10 +14,10 @@ type ParallelExecutor struct {
 	errors []error
 }
 
-// NewParallelExecutor creates a new parallel executor with the given context
-func NewParallelExecutor(ctx context.Context) *ParallelExecutor {
+// NewExecutor creates a new parallel executor with the given context
+func NewExecutor(ctx context.Context) *Executor {
 	execCtx, cancel := context.WithCancel(ctx)
-	return &ParallelExecutor{
+	return &Executor{
 		ctx:    execCtx,
 		cancel: cancel,
 		errors: make([]error, 0),
@@ -25,7 +25,7 @@ func NewParallelExecutor(ctx context.Context) *ParallelExecutor {
 }
 
 // Execute runs a function in a goroutine with proper waitgroup management
-func (pe *ParallelExecutor) Execute(name string, fn func() error) {
+func (pe *Executor) Execute(name string, fn func(context.Context) error) {
 	pe.wg.Add(1)
 	go func() {
 		defer pe.wg.Done()
@@ -37,8 +37,8 @@ func (pe *ParallelExecutor) Execute(name string, fn func() error) {
 		default:
 		}
 
-		// Run the function
-		if err := fn(); err != nil {
+		// Run the function with context
+		if err := fn(pe.ctx); err != nil {
 			pe.mu.Lock()
 			pe.errors = append(pe.errors, err)
 			pe.mu.Unlock()
@@ -47,23 +47,23 @@ func (pe *ParallelExecutor) Execute(name string, fn func() error) {
 }
 
 // Wait waits for all goroutines to complete
-func (pe *ParallelExecutor) Wait() {
+func (pe *Executor) Wait() {
 	pe.wg.Wait()
 }
 
 // Cancel cancels all running operations
-func (pe *ParallelExecutor) Cancel() {
+func (pe *Executor) Cancel() {
 	pe.cancel()
 }
 
 // Errors returns any errors that occurred during execution
-func (pe *ParallelExecutor) Errors() []error {
+func (pe *Executor) Errors() []error {
 	pe.mu.Lock()
 	defer pe.mu.Unlock()
 	return pe.errors
 }
 
 // Context returns the executor's context for child operations
-func (pe *ParallelExecutor) Context() context.Context {
+func (pe *Executor) Context() context.Context {
 	return pe.ctx
 }
