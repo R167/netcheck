@@ -28,7 +28,7 @@ const (
 // Common timeouts
 const (
 	HTTPTimeout   = 5 * time.Second
-	PortTimeout   = 2 * time.Second
+	PortTimeout   = 1 * time.Second  // Reduced from 2s for faster scanning on restricted networks
 	NATpmpTimeout = 3 * time.Second
 )
 
@@ -120,6 +120,7 @@ var (
 	// Global configuration flags
 	timeoutFlag    = flag.Duration("timeout", 60*time.Second, "Maximum time to run all tests (e.g. 30s, 2m, 1h)")
 	showVirtualFlag  = flag.Bool("show-virtual", false, "Show virtual network interfaces (VPN tunnels, Docker bridges, etc.)")
+	portTimeoutFlag = flag.Duration("port-timeout", PortTimeout, "Timeout for individual port scans (e.g. 500ms, 1s, 2s)")
 )
 
 func main() {
@@ -420,7 +421,7 @@ func scanCommonPorts(router *RouterInfo) {
 }
 
 func isPortOpen(ip string, port int) bool {
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, strconv.Itoa(port)), PortTimeout)
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, strconv.Itoa(port)), *portTimeoutFlag)
 	if err != nil {
 		return false
 	}
