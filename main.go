@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/R167/netcheck/starlink"
@@ -134,7 +135,7 @@ func main() {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runNetcheck()
+		runNetcheck(ctx)
 	}()
 
 	select {
@@ -146,31 +147,30 @@ func main() {
 	}
 }
 
-func runNetcheck() {
+func runNetcheck(ctx context.Context) {
 	fmt.Println("🔍 Network Gateway Security Checker")
 	fmt.Println("====================================")
 
 	// Determine which checks to run
 	selectedChecks := getSelectedChecks()
 
-	// Run standalone checks first
-	standaloneRan := false
+	// Separate checks by type
+	var standaloneChecks, routerChecks []Check
 	for _, check := range selectedChecks {
-		if !check.RequiresRouter {
-			check.StandaloneFunc()
-			standaloneRan = true
+		if check.RequiresRouter {
+			routerChecks = append(routerChecks, check)
+		} else {
+			standaloneChecks = append(standaloneChecks, check)
 		}
 	}
 
-	// If only standalone checks were requested, exit
-	onlyStandalone := true
-	for _, check := range selectedChecks {
-		if check.RequiresRouter {
-			onlyStandalone = false
-			break
-		}
+	// Run standalone checks in parallel
+	if len(standaloneChecks) > 0 {
+		runStandaloneChecksParallel(ctx, standaloneChecks)
 	}
-	if standaloneRan && onlyStandalone {
+
+	// If only standalone checks were requested, exit
+	if len(routerChecks) == 0 {
 		return
 	}
 
@@ -190,12 +190,8 @@ func runNetcheck() {
 		MDNSServices: []MDNSService{},
 	}
 
-	// Run router-based checks
-	for _, check := range selectedChecks {
-		if check.RequiresRouter {
-			check.RunFunc(router)
-		}
-	}
+	// Run router-based checks in parallel
+	runRouterChecksParallel(ctx, router, routerChecks)
 
 	generateReport(router)
 }
@@ -237,6 +233,105 @@ func getSelectedChecks() []Check {
 	}
 
 	return selected
+}
+
+// runStandaloneChecksParallel runs standalone checks in parallel
+func runStandaloneChecksParallel(ctx context.Context, checks []Check) {
+	executor := NewParallelExecutor(ctx)
+
+	for _, check := range checks {
+		check := check // Capture loop variable
+		executor.Execute(check.Name, func() error {
+			// Check context before running
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
+			check.StandaloneFunc()
+			return nil
+		})
+	}
+
+	executor.Wait()
+}
+
+// runRouterChecksParallel runs router-based checks in parallel
+func runRouterChecksParallel(ctx context.Context, router *RouterInfo, checks []Check) {
+	executor := NewParallelExecutor(ctx)
+
+	// Use mutex to protect concurrent access to router struct
+	var mu sync.Mutex
+
+	for _, check := range checks {
+		check := check // Capture loop variable
+		executor.Execute(check.Name, func() error {
+			// Check context before running
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
+			// Create a temporary router info for this check
+			tempRouter := &RouterInfo{
+				IP:           router.IP,
+				OpenPorts:    []int{},
+				Issues:       []SecurityIssue{},
+				MDNSServices: []MDNSService{},
+				PortMappings: []PortMapping{},
+			}
+
+			// Run the check with temporary router
+			check.RunFunc(tempRouter)
+
+			// Merge results back into main router struct
+			mu.Lock()
+			mergeRouterInfo(router, tempRouter)
+			mu.Unlock()
+
+			return nil
+		})
+	}
+
+	executor.Wait()
+}
+
+// mergeRouterInfo merges results from a temporary router into the main router
+func mergeRouterInfo(main, temp *RouterInfo) {
+	// Merge basic fields (only update if not empty)
+	if temp.Vendor != "" {
+		main.Vendor = temp.Vendor
+	}
+	if temp.Model != "" {
+		main.Model = temp.Model
+	}
+	if temp.SerialNumber != "" {
+		main.SerialNumber = temp.SerialNumber
+	}
+	if temp.ExternalIP != "" {
+		main.ExternalIP = temp.ExternalIP
+	}
+
+	// Merge boolean flags (OR operation)
+	main.WebInterface = main.WebInterface || temp.WebInterface
+	main.DefaultCreds = main.DefaultCreds || temp.DefaultCreds
+	main.UPnPEnabled = main.UPnPEnabled || temp.UPnPEnabled
+	main.NATpmpEnabled = main.NATpmpEnabled || temp.NATpmpEnabled
+	main.IPv6Enabled = main.IPv6Enabled || temp.IPv6Enabled
+	main.MDNSEnabled = main.MDNSEnabled || temp.MDNSEnabled
+
+	// Merge arrays
+	main.OpenPorts = append(main.OpenPorts, temp.OpenPorts...)
+	main.Issues = append(main.Issues, temp.Issues...)
+	main.PortMappings = append(main.PortMappings, temp.PortMappings...)
+	main.MDNSServices = append(main.MDNSServices, temp.MDNSServices...)
+
+	// Merge Starlink info if present
+	if temp.Starlink != nil {
+		main.Starlink = temp.Starlink
+	}
 }
 
 func getGatewayIP() string {
