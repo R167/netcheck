@@ -119,6 +119,7 @@ var (
 
 	// Global configuration flags
 	timeoutFlag    = flag.Duration("timeout", 60*time.Second, "Maximum time to run all tests (e.g. 30s, 2m, 1h)")
+	showVirtualFlag  = flag.Bool("show-virtual", false, "Show virtual network interfaces (VPN tunnels, Docker bridges, etc.)")
 )
 
 func main() {
