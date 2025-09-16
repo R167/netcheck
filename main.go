@@ -99,7 +99,22 @@ type MDNSService struct {
 
 
 var (
-	mdnsFlag = flag.Bool("mdns", false, "Perform comprehensive mDNS service discovery")
+	// Test category flags
+	allFlag        = flag.Bool("all", false, "Run all available tests")
+	defaultFlag    = flag.Bool("default", false, "Run default test suite (same as no flags)")
+	webFlag        = flag.Bool("web", false, "Test web interface and default credentials")
+	portsFlag      = flag.Bool("ports", false, "Scan common management ports")
+	upnpFlag       = flag.Bool("upnp", false, "Test UPnP services and port mappings")
+	natpmpFlag     = flag.Bool("natpmp", false, "Test NAT-PMP services")
+	ipv6Flag       = flag.Bool("ipv6", false, "Check IPv6 configuration")
+	mdnsFlag       = flag.Bool("mdns", false, "Perform comprehensive mDNS service discovery")
+	apiFlag        = flag.Bool("api", false, "Check for exposed router APIs")
+	starlinkFlag   = flag.Bool("starlink", false, "Check for Starlink Dishy")
+	routesFlag     = flag.Bool("routes", false, "Display routing information")
+	deviceFlag     = flag.Bool("device", false, "Display interface/device information")
+	externalFlag   = flag.Bool("external", false, "Discover external IPv4/IPv6 addresses")
+	proxyFlag      = flag.Bool("proxy", false, "Test proxy configuration (requires --external)")
+	lldpFlag       = flag.Bool("lldp", false, "Link layer discovery and debugging")
 )
 
 func main() {
@@ -108,6 +123,31 @@ func main() {
 	fmt.Println("🔍 Network Gateway Security Checker")
 	fmt.Println("====================================")
 
+	// Determine which checks to run
+	selectedChecks := getSelectedChecks()
+
+	// Run standalone checks first
+	standaloneRan := false
+	for _, check := range selectedChecks {
+		if !check.RequiresRouter {
+			check.StandaloneFunc()
+			standaloneRan = true
+		}
+	}
+
+	// If only standalone checks were requested, exit
+	onlyStandalone := true
+	for _, check := range selectedChecks {
+		if check.RequiresRouter {
+			onlyStandalone = false
+			break
+		}
+	}
+	if standaloneRan && onlyStandalone {
+		return
+	}
+
+	// Get gateway for router-based checks
 	gatewayIP := getGatewayIP()
 	if gatewayIP == "" {
 		fmt.Println("❌ Could not determine gateway IP")
@@ -123,15 +163,53 @@ func main() {
 		MDNSServices: []MDNSService{},
 	}
 
-	checkWebInterface(router)
-	scanCommonPorts(router)
-	checkUPnP(router)
-	checkNATpmp(router)
-	checkIPv6(router)
-	checkMDNS(router)
-	checkRouterAPIs(router)
-	checkStarlink(router)
+	// Run router-based checks
+	for _, check := range selectedChecks {
+		if check.RequiresRouter {
+			check.RunFunc(router)
+		}
+	}
+
 	generateReport(router)
+}
+
+// getSelectedChecks determines which checks should be run based on flags
+func getSelectedChecks() []Check {
+	var selected []Check
+
+	// Check if no specific flags were set (default mode)
+	noFlagsSet := true
+	for _, check := range checks {
+		if *check.Flag {
+			noFlagsSet = false
+			break
+		}
+	}
+	if !noFlagsSet {
+		noFlagsSet = *defaultFlag
+	}
+
+	// If --all is set, run everything
+	if *allFlag {
+		return checks
+	}
+
+	// Otherwise, run selected checks or default set
+	for _, check := range checks {
+		shouldRun := false
+
+		if *check.Flag {
+			shouldRun = true
+		} else if (noFlagsSet || *defaultFlag) && check.DefaultEnabled {
+			shouldRun = true
+		}
+
+		if shouldRun {
+			selected = append(selected, check)
+		}
+	}
+
+	return selected
 }
 
 func getGatewayIP() string {
@@ -686,4 +764,153 @@ func printRecommendations(router *RouterInfo) {
 	if router.IPv6Enabled {
 		fmt.Println("• Review IPv6 firewall configuration")
 	}
+}
+
+// Check represents a security check or information gathering function
+type Check struct {
+	Name         string
+	Description  string
+	Icon         string
+	Flag         *bool
+	RunFunc      func(*RouterInfo)
+	StandaloneFunc func()
+	RequiresRouter bool
+	DefaultEnabled bool
+}
+
+// Global check registry
+var checks = []Check{
+	{
+		Name:           "web",
+		Description:    "Web interface and default credentials",
+		Icon:           "🔍",
+		Flag:           webFlag,
+		RunFunc:        checkWebInterface,
+		RequiresRouter: true,
+		DefaultEnabled: true,
+	},
+	{
+		Name:           "ports",
+		Description:    "Common management ports",
+		Icon:           "🔍",
+		Flag:           portsFlag,
+		RunFunc:        func(r *RouterInfo) { scanCommonPorts(r) },
+		RequiresRouter: true,
+		DefaultEnabled: true,
+	},
+	{
+		Name:           "upnp",
+		Description:    "UPnP services and port mappings",
+		Icon:           "🔍",
+		Flag:           upnpFlag,
+		RunFunc:        checkUPnP,
+		RequiresRouter: true,
+		DefaultEnabled: true,
+	},
+	{
+		Name:           "natpmp",
+		Description:    "NAT-PMP services",
+		Icon:           "🔍",
+		Flag:           natpmpFlag,
+		RunFunc:        checkNATpmp,
+		RequiresRouter: true,
+		DefaultEnabled: true,
+	},
+	{
+		Name:           "ipv6",
+		Description:    "IPv6 configuration",
+		Icon:           "🔍",
+		Flag:           ipv6Flag,
+		RunFunc:        checkIPv6,
+		RequiresRouter: true,
+		DefaultEnabled: true,
+	},
+	{
+		Name:           "mdns",
+		Description:    "mDNS service discovery",
+		Icon:           "📡",
+		Flag:           mdnsFlag,
+		RunFunc:        checkMDNS,
+		RequiresRouter: true,
+		DefaultEnabled: false,
+	},
+	{
+		Name:           "api",
+		Description:    "Router APIs and services",
+		Icon:           "🔍",
+		Flag:           apiFlag,
+		RunFunc:        checkRouterAPIs,
+		RequiresRouter: true,
+		DefaultEnabled: true,
+	},
+	{
+		Name:           "starlink",
+		Description:    "Starlink Dishy detection",
+		Icon:           "🛰️",
+		Flag:           starlinkFlag,
+		RunFunc:        checkStarlink,
+		RequiresRouter: true,
+		DefaultEnabled: false,
+	},
+	{
+		Name:           "routes",
+		Description:    "Routing information",
+		Icon:           "📍",
+		Flag:           routesFlag,
+		StandaloneFunc: checkRoutes,
+		RequiresRouter: false,
+		DefaultEnabled: false,
+	},
+	{
+		Name:           "device",
+		Description:    "Interface/device information",
+		Icon:           "🖥️",
+		Flag:           deviceFlag,
+		StandaloneFunc: checkDevice,
+		RequiresRouter: false,
+		DefaultEnabled: false,
+	},
+	{
+		Name:           "external",
+		Description:    "External address discovery",
+		Icon:           "🌍",
+		Flag:           externalFlag,
+		StandaloneFunc: checkExternal,
+		RequiresRouter: false,
+		DefaultEnabled: false,
+	},
+	{
+		Name:           "lldp",
+		Description:    "Link layer discovery",
+		Icon:           "🔗",
+		Flag:           lldpFlag,
+		StandaloneFunc: checkLLDP,
+		RequiresRouter: false,
+		DefaultEnabled: false,
+	},
+}
+
+// Stub functions for new features - to be implemented in separate PRs
+func checkRoutes() {
+	fmt.Println("📍 Routing Information")
+	fmt.Println("=====================")
+	fmt.Println("  ℹ️  Route checking not yet implemented (Issue #4)")
+}
+
+func checkDevice() {
+	fmt.Println("🖥️  Device/Interface Information")
+	fmt.Println("==============================")
+	fmt.Println("  ℹ️  Device information not yet implemented (Issue #6)")
+}
+
+func checkExternal() {
+	fmt.Println("🌍 External Address Discovery")
+	fmt.Println("============================")
+	fmt.Println("  ℹ️  External discovery not yet implemented (Issue #8)")
+}
+
+func checkLLDP() {
+	fmt.Println("🔗 Link Layer Discovery Protocol")
+	fmt.Println("===============================")
+	fmt.Println("  ℹ️  LLDP checking not yet implemented (Issue #2)")
 }
