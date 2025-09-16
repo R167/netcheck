@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/R167/netcheck/starlink"
 )
 
 // Severity levels for security issues
@@ -59,6 +61,7 @@ type RouterInfo struct {
 	PortMappings  []PortMapping
 	MDNSServices  []MDNSService
 	Issues        []SecurityIssue
+	Starlink      *starlink.StarLinkInfo
 }
 
 type PortMapping struct {
@@ -127,6 +130,7 @@ func main() {
 	checkIPv6(router)
 	checkMDNS(router)
 	checkRouterAPIs(router)
+	checkStarlink(router)
 	generateReport(router)
 }
 
@@ -541,6 +545,39 @@ func checkWPS(router *RouterInfo) {
 	fmt.Println("  ℹ️  WPS configuration not accessible")
 }
 
+func checkStarlink(router *RouterInfo) {
+	fmt.Println("🛰️  Checking for Starlink Dishy...")
+
+	starlinkInfo := starlink.CheckStarlink()
+	router.Starlink = starlinkInfo
+
+	if starlinkInfo.Accessible {
+		fmt.Println("  📡 Starlink Dishy detected and accessible")
+
+		if starlinkInfo.DeviceInfo != nil {
+			fmt.Printf("  🔧 Hardware: %s\n", starlinkInfo.DeviceInfo.HardwareVersion)
+			fmt.Printf("  💾 Software: %s\n", starlinkInfo.DeviceInfo.SoftwareVersion)
+		}
+
+		if len(starlinkInfo.SecurityIssues) > 0 {
+			fmt.Printf("  ⚠️  Found %d security issue(s)\n", len(starlinkInfo.SecurityIssues))
+
+			// Add Starlink security issues to router issues with proper format conversion
+			for _, issue := range starlinkInfo.SecurityIssues {
+				router.Issues = append(router.Issues, SecurityIssue{
+					Severity:    issue.Severity,
+					Description: issue.Title,
+					Details:     issue.Description + ". " + issue.Impact + " " + issue.Remediation,
+				})
+			}
+		} else {
+			fmt.Println("  ✅ No security issues detected")
+		}
+	} else {
+		fmt.Println("  ℹ️  No Starlink Dishy detected on network")
+	}
+}
+
 func generateReport(router *RouterInfo) {
 	fmt.Println("\n📊 Security Assessment Report")
 	fmt.Println("=============================")
@@ -595,6 +632,11 @@ func generateReport(router *RouterInfo) {
 			}
 		}
 		fmt.Println()
+	}
+
+	// Display Starlink information if detected
+	if router.Starlink != nil && router.Starlink.Accessible {
+		fmt.Print(starlink.FormatStarlinkReport(router.Starlink))
 	}
 
 	if len(router.Issues) == 0 {
