@@ -850,11 +850,6 @@ func checkRoutes() {
 }
 
 
-func checkExternal() {
-	fmt.Println("🌍 External Address Discovery")
-	fmt.Println("============================")
-	fmt.Println("  ℹ️  External discovery not yet implemented (Issue #8)")
-}
 
 
 
