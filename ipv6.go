@@ -322,9 +322,8 @@ func analyzeIPv6Configuration(interfaces []IPv6InterfaceInfo, router *RouterInfo
 		// Display address breakdown
 		for _, addr := range iface.Addresses {
 			totalAddresses++
-			statusIcon := "🔵"
+			statusIcon := getIPv6StatusIcon(addr)
 			if addr.Temporary {
-				statusIcon = "🟡"
 				tempAddresses++
 			}
 
@@ -469,4 +468,32 @@ func testIPv6Connectivity(address string) bool {
 
 	// Try ICMP ping if TCP fails (simplified check)
 	return false
+}
+
+// getIPv6StatusIcon returns the appropriate emoji for an IPv6 address based on its type and characteristics
+func getIPv6StatusIcon(addr IPv6AddressInfo) string {
+	// Temporary addresses (Privacy Extensions) - yellow circle
+	if addr.Temporary {
+		return "🟡"
+	}
+
+	// Different icons based on address type
+	switch addr.Type {
+	case "Link-Local":
+		return "🔗" // Chain link for link-local (local network only)
+	case "Loopback":
+		return "🔄" // Loop for loopback
+	case "Global Unicast":
+		return "🌐" // Globe for global/internet addresses
+	case "Unique Local":
+		return "🏠" // House for ULA (site-local)
+	case "Multicast":
+		return "📢" // Megaphone for multicast
+	case "Teredo":
+		return "🌉" // Bridge for tunneling
+	case "6to4":
+		return "🌉" // Bridge for tunneling
+	default:
+		return "🔵" // Blue circle for other types
+	}
 }
