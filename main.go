@@ -101,6 +101,9 @@ type MDNSService struct {
 }
 
 
+// Global output mutex to prevent interleaved output
+var outputMutex sync.Mutex
+
 var (
 	// Test category flags
 	allFlag        = flag.Bool("all", false, "Run all available tests")
@@ -250,7 +253,11 @@ func runStandaloneChecksParallel(ctx context.Context, checks []Check) {
 			default:
 			}
 
+			// Run with output mutex to prevent interleaving
+			outputMutex.Lock()
 			check.StandaloneFunc()
+			outputMutex.Unlock()
+
 			return nil
 		})
 	}
@@ -284,8 +291,10 @@ func runRouterChecksParallel(ctx context.Context, router *RouterInfo, checks []C
 				PortMappings: []PortMapping{},
 			}
 
-			// Run the check with temporary router
+			// Run the check with output mutex to prevent interleaving
+			outputMutex.Lock()
 			check.RunFunc(tempRouter)
+			outputMutex.Unlock()
 
 			// Merge results back into main router struct
 			mu.Lock()
