@@ -842,14 +842,6 @@ var checks = []Check{
 	},
 }
 
-// Stub functions for new features - to be implemented in separate PRs
-func checkRoutes() {
-	fmt.Println("📍 Routing Information")
-	fmt.Println("=====================")
-	fmt.Println("  ℹ️  Route checking not yet implemented (Issue #4)")
-}
-
-
 
 
 
