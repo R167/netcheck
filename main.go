@@ -922,11 +922,6 @@ func checkRoutes() {
 	fmt.Println("  ℹ️  Route checking not yet implemented (Issue #4)")
 }
 
-func checkDevice() {
-	fmt.Println("🖥️  Device/Interface Information")
-	fmt.Println("==============================")
-	fmt.Println("  ℹ️  Device information not yet implemented (Issue #6)")
-}
 
 func checkExternal() {
 	fmt.Println("🌍 External Address Discovery")
@@ -934,8 +929,9 @@ func checkExternal() {
 	fmt.Println("  ℹ️  External discovery not yet implemented (Issue #8)")
 }
 
-func checkLLDP() {
-	fmt.Println("🔗 Link Layer Discovery Protocol")
-	fmt.Println("===============================")
-	fmt.Println("  ℹ️  LLDP checking not yet implemented (Issue #2)")
-}
+
+
+
+
+
+
