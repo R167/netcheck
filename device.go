@@ -7,6 +7,36 @@ import (
 	"strings"
 )
 
+// isVirtualInterface checks if an interface is virtual/auto-generated
+func isVirtualInterface(name string) bool {
+	// Common virtual interface prefixes across different systems
+	virtualPrefixes := []string{
+		"utun",     // macOS VPN tunnels
+		"awdl",     // macOS Apple Wireless Direct Link
+		"llw",      // macOS Low latency WLAN interface
+		"bridge",   // Bridge interfaces
+		"veth",     // Linux virtual ethernet (Docker)
+		"docker",   // Docker interfaces
+		"virbr",    // Virtual bridge (libvirt)
+		"vnet",     // Virtual network interfaces
+		"tap",      // TAP interfaces
+		"tun",      // TUN interfaces (generic)
+		"gif",      // Generic tunnel interface
+		"stf",      // 6to4 tunnel interface
+		"anpi",     // macOS internal interfaces
+		"ap",       // macOS access point interface
+	}
+
+	// Check if the interface starts with any virtual prefix
+	for _, prefix := range virtualPrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func checkDevice() {
 	fmt.Println("🖥️  Device/Interface Information")
 	fmt.Println("==============================")
@@ -54,6 +84,10 @@ func getNetworkInterfaces() []string {
 	ifaces, err := net.Interfaces()
 	if err == nil {
 		for _, iface := range ifaces {
+			// Skip virtual interfaces unless --show-virtual flag is set
+			if !*showVirtualFlag && isVirtualInterface(iface.Name) {
+				continue
+			}
 			var status string
 			if iface.Flags&net.FlagUp != 0 {
 				status = "UP"
