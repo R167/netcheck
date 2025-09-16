@@ -1,22 +1,21 @@
 # TODO List
 
-## Planned Features
+## Completed Features
 
-### Starlink Dishy Configuration Detection
-- **Target**: Add support for detecting Starlink Dishy configuration via gRPC
-- **Endpoint**: `192.168.100.1` (standard Starlink IP)
-- **Protocol**: gRPC using protobuf definitions
-- **Reference**: https://github.com/clarkzjw/starlink-grpc-golang
-- **Implementation Notes**:
-  - Check if route to 192.168.100.1 exists
-  - Attempt gRPC connection to Starlink Dishy service
-  - Extract configuration information and security settings
-  - Add to security assessment if accessible
-  - Handle cases where Starlink is not present on network
-- **Branch**: Create `feature/starlink-support` branch for implementation
-- **Testing**: Remote forward setup may be needed for testing
+### ✅ Starlink Dishy Configuration Detection (Completed)
+- **Status**: ✅ COMPLETED - Implemented in `feature/starlink-support` branch
+- **Implementation**: Complete Starlink gRPC scanner with security assessment
+- **Features Added**:
+  - gRPC client using grpcurl for communication with Starlink API
+  - Device information extraction (hardware, software, device ID)
+  - Operational status monitoring (performance, uptime, signal strength)
+  - Configuration analysis (update policies, power management)
+  - Comprehensive security assessment with multiple severity levels
+  - Beautiful reporting with detailed metrics and recommendations
+  - Support for both standard (192.168.100.1:9200) and test endpoints
+  - Graceful handling when Starlink not present on network
 
-### Future Enhancements
+## Future Enhancements
 - Support for more ISP-specific router models
 - JSON output format for automated processing
 - Plugin architecture for extensible scanning

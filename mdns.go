@@ -1,14 +1,20 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"log"
 	"net"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/hashicorp/mdns"
 )
 
 func checkMDNS(router *RouterInfo) {
-	fmt.Println("\n🔍 Checking mDNS/Bonjour services...")
+	fmt.Println("🔍 Checking mDNS/Bonjour services...")
 
 	if *mdnsFlag {
 		// Comprehensive mDNS service discovery
@@ -20,7 +26,11 @@ func checkMDNS(router *RouterInfo) {
 			fmt.Printf("  📡 Found %d mDNS services\n", len(services))
 
 			for _, service := range services {
-				fmt.Printf("  🔍 %s (%s) at %s:%d\n", service.Name, service.Type, service.IP, service.Port)
+				if service.IP != "" && service.Port > 0 {
+					fmt.Printf("  🔍 %s (%s) at %s:%d\n", service.Name, service.Type, service.IP, service.Port)
+				} else {
+					fmt.Printf("  🔍 %s (%s)\n", service.Name, service.Type)
+				}
 
 				// Check for potentially risky services
 				checkRiskyMDNSService(router, service)
@@ -51,25 +61,15 @@ func checkMDNS(router *RouterInfo) {
 	}
 }
 
+// sendMDNSQuery sends a basic mDNS query to detect if the service is running
 func sendMDNSQuery() bool {
-	// Send mDNS query for _services._dns-sd._udp.local
-	addr, err := net.ResolveUDPAddr("udp4", "224.0.0.251:5353")
-	if err != nil {
-		return false
-	}
-
-	localAddr, err := net.ResolveUDPAddr("udp4", ":0")
-	if err != nil {
-		return false
-	}
-
-	conn, err := net.ListenUDP("udp4", localAddr)
+	conn, err := net.Dial("udp", "224.0.0.251:5353")
 	if err != nil {
 		return false
 	}
 	defer conn.Close()
 
-	// Simple mDNS query for services
+	// Simple mDNS query for _services._dns-sd._udp.local
 	query := []byte{
 		0x00, 0x00, // Transaction ID
 		0x00, 0x00, // Flags
@@ -82,25 +82,31 @@ func sendMDNSQuery() bool {
 		0x07, '_', 'd', 'n', 's', '-', 's', 'd',
 		0x04, '_', 'u', 'd', 'p',
 		0x05, 'l', 'o', 'c', 'a', 'l',
-		0x00, // End of name
+		0x00,       // End of name
 		0x00, 0x0C, // Type PTR
 		0x00, 0x01, // Class IN
 	}
 
-	_, err = conn.WriteTo(query, addr)
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	_, err = conn.Write(query)
 	if err != nil {
 		return false
 	}
 
 	conn.SetDeadline(time.Now().Add(3 * time.Second))
 	buffer := make([]byte, 1024)
-	n, _, err := conn.ReadFrom(buffer)
+	n, err := conn.Read(buffer)
 
 	return err == nil && n > 12 // Basic validation that we got a response
 }
 
 func discoverMDNSServices() []MDNSService {
+	// Suppress mdns library log output to reduce noise from IPv6 errors
+	log.SetOutput(io.Discard)
+	defer log.SetOutput(os.Stderr)
+
 	var services []MDNSService
+	serviceMap := make(map[string]*MDNSService) // Use map to avoid duplicates
 
 	// Common service types to query
 	serviceTypes := []string{
@@ -130,259 +136,136 @@ func discoverMDNSServices() []MDNSService {
 		"_telnet._tcp.local",
 		"_daap._tcp.local",
 		"_dpap._tcp.local",
+		"_adisk._tcp.local",
 		"_eppc._tcp.local",
+		"_sleep-proxy._udp.local",
+		"_apple-mobdev2._tcp.local",
+		"_airpodd._tcp.local",
+		"_homekit-camera._tcp.local",
+		"_prometheus-http._tcp.local",
+		"_esphomelib._tcp.local",
+		"_ipps._tcp.local",
 	}
 
-	addr, err := net.ResolveUDPAddr("udp4", "224.0.0.251:5353")
-	if err != nil {
-		return services
-	}
+	// Set up context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	localAddr, err := net.ResolveUDPAddr("udp4", ":0")
-	if err != nil {
-		return services
-	}
+	// Channel to collect results
+	entriesCh := make(chan *mdns.ServiceEntry, 100)
 
-	conn, err := net.ListenUDP("udp4", localAddr)
-	if err != nil {
-		return services
-	}
-	defer conn.Close()
+	// Create a map to track service types for results
+	typeMap := make(map[string]string)
 
 	// Query each service type
 	for _, serviceType := range serviceTypes {
-		query := buildMDNSQuery(serviceType)
-		conn.WriteTo(query, addr)
+		// Remove .local suffix for hashicorp/mdns
+		cleanServiceType := strings.TrimSuffix(serviceType, ".local")
+		typeMap[cleanServiceType] = serviceType
+
+		go func(stype string) {
+			params := &mdns.QueryParam{
+				Service:             stype,
+				Domain:              "local",
+				Timeout:             2 * time.Second,
+				Entries:             entriesCh,
+				WantUnicastResponse: false,
+			}
+			// Use Query since QueryWithContext isn't available in all versions
+			if err := mdns.Query(params); err != nil {
+				// Log error if needed, but continue with other queries
+			}
+		}(cleanServiceType)
 	}
 
-	// Collect responses for a few seconds
-	conn.SetDeadline(time.Now().Add(5 * time.Second))
-	responses := make(map[string]MDNSService)
-
+	// Collect results with timeout
+	timeout := time.After(8 * time.Second)
 	for {
-		buffer := make([]byte, 4096)
-		n, _, err := conn.ReadFrom(buffer)
-		if err != nil {
-			break
-		}
+		select {
+		case entry := <-entriesCh:
+			if entry != nil {
+				// Create unique key to avoid duplicates
+				var ip string
+				if entry.AddrV4 != nil {
+					ip = entry.AddrV4.String()
+				} else if entry.AddrV6 != nil {
+					ip = entry.AddrV6.String()
+				}
 
-		if parsedServices := parseMDNSResponse(buffer[:n]); len(parsedServices) > 0 {
-			for _, service := range parsedServices {
-				key := fmt.Sprintf("%s:%s:%d", service.Name, service.IP, service.Port)
-				responses[key] = service
+				key := fmt.Sprintf("%s:%s:%d", entry.Name, ip, entry.Port)
+
+				// Only add if it's a new service or we have better information
+				if existingService, exists := serviceMap[key]; !exists || existingService.IP == "" {
+					var txtData []string
+					if entry.Info != "" {
+						txtData = strings.Split(entry.Info, "\n")
+					}
+
+					// Try to find the original service type from our map
+					serviceType := "_unknown._tcp.local"
+					for clean, original := range typeMap {
+						if strings.Contains(entry.Name, strings.TrimPrefix(clean, "_")) {
+							serviceType = original
+							break
+						}
+					}
+
+					service := &MDNSService{
+						Name:    entry.Name,
+						Type:    serviceType,
+						IP:      ip,
+						Port:    entry.Port,
+						TXTData: txtData,
+					}
+
+					// Only add services with valid information
+					if service.Name != "" && (service.IP != "" || service.Port > 0) {
+						serviceMap[key] = service
+					}
+				}
 			}
+		case <-timeout:
+			goto done
+		case <-ctx.Done():
+			goto done
 		}
 	}
 
+done:
 	// Convert map to slice
-	for _, service := range responses {
-		services = append(services, service)
+	for _, service := range serviceMap {
+		// Skip entries without proper resolution
+		if service.IP == "0.0.0.0" || service.IP == "" {
+			// Try to resolve the name if we have it
+			if service.Name != "" {
+				if ips, err := net.LookupIP(service.Name); err == nil && len(ips) > 0 {
+					service.IP = ips[0].String()
+				}
+			}
+		}
+
+		services = append(services, *service)
 	}
 
 	return services
 }
 
-func buildMDNSQuery(serviceType string) []byte {
-	query := []byte{
-		0x00, 0x00, // Transaction ID
-		0x00, 0x00, // Flags
-		0x00, 0x01, // Questions
-		0x00, 0x00, // Answer RRs
-		0x00, 0x00, // Authority RRs
-		0x00, 0x00, // Additional RRs
-	}
-
-	// Encode the service type name
-	parts := strings.Split(serviceType, ".")
-	for _, part := range parts {
-		if part != "" {
-			query = append(query, byte(len(part)))
-			query = append(query, []byte(part)...)
-		}
-	}
-	query = append(query, 0x00) // End of name
-
-	query = append(query, 0x00, 0x0C) // Type PTR
-	query = append(query, 0x00, 0x01) // Class IN
-
-	return query
-}
-
-func parseMDNSResponse(data []byte) []MDNSService {
-	var services []MDNSService
-
-	if len(data) < 12 {
-		return services
-	}
-
-	// Skip header
-	offset := 12
-
-	// Parse questions (skip them)
-	questions := int(data[4])<<8 | int(data[5])
-	for i := 0; i < questions && offset < len(data); i++ {
-		// Skip name
-		for offset < len(data) && data[offset] != 0 {
-			if data[offset]&0xC0 == 0xC0 {
-				offset += 2
-				break
-			}
-			offset += int(data[offset]) + 1
-		}
-		if offset < len(data) {
-			offset++ // Skip null terminator
-		}
-		offset += 4 // Skip type and class
-	}
-
-	// Parse answers
-	answers := int(data[6])<<8 | int(data[7])
-	for i := 0; i < answers && offset < len(data); i++ {
-		service := parseMDNSRecord(data, &offset)
-		if service.Name != "" {
-			services = append(services, service)
-		}
-	}
-
-	return services
-}
-
-func parseMDNSRecord(data []byte, offset *int) MDNSService {
-	service := MDNSService{}
-
-	if *offset >= len(data) {
-		return service
-	}
-
-	// Skip name
-	startOffset := *offset
-	for *offset < len(data) && data[*offset] != 0 {
-		if data[*offset]&0xC0 == 0xC0 {
-			*offset += 2
-			break
-		}
-		*offset += int(data[*offset]) + 1
-	}
-	if *offset < len(data) {
-		*offset++ // Skip null terminator
-	}
-
-	if *offset+10 > len(data) {
-		return service
-	}
-
-	recordType := int(data[*offset])<<8 | int(data[*offset+1])
-	*offset += 2
-	recordClass := int(data[*offset])<<8 | int(data[*offset+1])
-	*offset += 2
-	ttl := int(data[*offset])<<24 | int(data[*offset+1])<<16 | int(data[*offset+2])<<8 | int(data[*offset+3])
-	*offset += 4
-	dataLength := int(data[*offset])<<8 | int(data[*offset+1])
-	*offset += 2
-
-	_ = recordClass
-	_ = ttl
-
-	if *offset+dataLength > len(data) {
-		return service
-	}
-
-	// Parse based on record type
-	switch recordType {
-	case 1: // A record
-		if dataLength == 4 {
-			service.IP = fmt.Sprintf("%d.%d.%d.%d", data[*offset], data[*offset+1], data[*offset+2], data[*offset+3])
-			service.Name = extractName(data, startOffset)
-		}
-	case 28: // AAAA record
-		if dataLength == 16 {
-			// IPv6 address
-			service.Name = extractName(data, startOffset)
-		}
-	case 12: // PTR record
-		service.Type = extractName(data, startOffset)
-		service.Name = extractName(data, *offset)
-	case 33: // SRV record
-		if dataLength >= 6 {
-			service.Port = int(data[*offset+4])<<8 | int(data[*offset+5])
-			service.Name = extractName(data, startOffset)
-		}
-	case 16: // TXT record
-		service.Name = extractName(data, startOffset)
-		// Parse TXT data (simplified)
-		txtOffset := *offset
-		for txtOffset < *offset+dataLength {
-			txtLen := int(data[txtOffset])
-			if txtLen > 0 && txtOffset+txtLen < len(data) {
-				txt := string(data[txtOffset+1 : txtOffset+1+txtLen])
-				service.TXTData = append(service.TXTData, txt)
-			}
-			txtOffset += txtLen + 1
-		}
-	}
-
-	*offset += dataLength
-	return service
-}
-
-func extractName(data []byte, offset int) string {
-	if offset >= len(data) {
-		return ""
-	}
-
-	var name strings.Builder
-	jumped := false
-	jumpOffset := 0
-
-	for offset < len(data) {
-		length := data[offset]
-
-		if length == 0 {
-			break
-		}
-
-		// Handle compression
-		if length&0xC0 == 0xC0 {
-			if !jumped {
-				jumpOffset = offset + 2
-				jumped = true
-			}
-			offset = int(data[offset+1]) | ((int(length) & 0x3F) << 8)
-			continue
-		}
-
-		offset++
-		if offset+int(length) > len(data) {
-			break
-		}
-
-		if name.Len() > 0 {
-			name.WriteByte('.')
-		}
-		name.Write(data[offset : offset+int(length)])
-		offset += int(length)
-	}
-
-	if jumped {
-		offset = jumpOffset
-	}
-
-	return name.String()
-}
-
+// checkRiskyMDNSService identifies potentially risky services
 func checkRiskyMDNSService(router *RouterInfo, service MDNSService) {
 	riskyServices := map[string]string{
-		"_ssh._tcp.local":     "SSH service exposed",
-		"_ftp._tcp.local":     "FTP service exposed",
-		"_telnet._tcp.local":  "Telnet service exposed",
-		"_smb._tcp.local":     "SMB/CIFS file sharing exposed",
-		"_nfs._tcp.local":     "NFS file sharing exposed",
-		"_vnc._tcp.local":     "VNC remote desktop exposed",
-		"_rdp._tcp.local":     "RDP remote desktop exposed",
-		"_printer._tcp.local": "Network printer exposed",
+		"_ssh._tcp.local":          "SSH service exposed",
+		"_ftp._tcp.local":          "FTP service exposed",
+		"_telnet._tcp.local":       "Telnet service exposed",
+		"_vnc._tcp.local":          "VNC service exposed",
+		"_rdp._tcp.local":          "RDP service exposed",
+		"_smb._tcp.local":          "SMB/CIFS file sharing exposed",
+		"_nfs._tcp.local":          "NFS file sharing exposed",
+		"_afpovertcp._tcp.local":   "Apple Filing Protocol exposed",
+		"_printer._tcp.local":      "Network printer exposed",
+		"_ipp._tcp.local":          "Internet Printing Protocol exposed",
 	}
 
-	if description, exists := riskyServices[service.Type]; exists {
+	if description, isRisky := riskyServices[service.Type]; isRisky {
 		router.Issues = append(router.Issues, SecurityIssue{
 			Severity:    "MEDIUM",
 			Description: description + " via mDNS",

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"flag"
 	"fmt"
@@ -115,11 +116,35 @@ var (
 	externalFlag   = flag.Bool("external", false, "Discover external IPv4/IPv6 addresses")
 	proxyFlag      = flag.Bool("proxy", false, "Test proxy configuration (requires --external)")
 	lldpFlag       = flag.Bool("lldp", false, "Link layer discovery and debugging")
+
+	// Global configuration flags
+	timeoutFlag    = flag.Duration("timeout", 60*time.Second, "Maximum time to run all tests (e.g. 30s, 2m, 1h)")
 )
 
 func main() {
 	flag.Parse()
 
+	// Set up global timeout context
+	ctx, cancel := context.WithTimeout(context.Background(), *timeoutFlag)
+	defer cancel()
+
+	// Monitor for timeout
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runNetcheck()
+	}()
+
+	select {
+	case <-done:
+		// Normal completion
+	case <-ctx.Done():
+		fmt.Printf("\n⏰ Timeout reached (%v) - stopping checks\n", *timeoutFlag)
+		os.Exit(1)
+	}
+}
+
+func runNetcheck() {
 	fmt.Println("🔍 Network Gateway Security Checker")
 	fmt.Println("====================================")
 
