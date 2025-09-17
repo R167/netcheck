@@ -12,6 +12,34 @@ A comprehensive network gateway security assessment tool for identifying vulnera
 - **IPv6 Assessment**: Checks IPv6 configuration and potential firewall bypasses
 - **Comprehensive Reporting**: Prioritized security issues with actionable recommendations
 
+## Detectors
+
+| Detector | Flag | Default | Description |
+|----------|------|---------|-------------|
+| **Web Interface** | `--web` | ✅ | Tests router web interface, detects vendor, and checks default credentials |
+| **Port Scanning** | `--ports` | ✅ | Scans common management ports (SSH, HTTP, HTTPS, SNMP, etc.) |
+| **UPnP Discovery** | `--upnp` | ✅ | Discovers UPnP services and enumerates active port mappings |
+| **NAT-PMP** | `--natpmp` | ✅ | Detects NAT-PMP services for automatic port mapping |
+| **IPv6 Analysis** | `--ipv6` | ✅ | Analyzes IPv6 configuration and connectivity |
+| **API Discovery** | `--api` | ✅ | Checks for exposed router APIs and CGI scripts |
+| **mDNS Discovery** | `--mdns` | 🔧 | Comprehensive mDNS/Bonjour service discovery |
+| **Starlink Detection** | `--starlink` | 🔧 | Specialized Starlink Dishy detection |
+| **Routing Info** | `--routes` | 🔧 | Displays routing table information |
+| **Device Info** | `--device` | 🔧 | Shows network interface and device information |
+| **External IP** | `--external` | 🔧 | Discovers external IPv4/IPv6 addresses |
+| **LLDP Discovery** | `--lldp` | 🔧 | Link Layer Discovery Protocol analysis |
+
+### Special Flags
+
+| Flag | Description |
+|------|-------------|
+| `--all` | Run all available detectors |
+| `--default` | Run only the default detector suite |
+| `--show-virtual` | Include virtual network interfaces (VPN tunnels, Docker bridges, etc.) |
+| `--proxy` | Test proxy configuration (requires `--external`) |
+
+**Legend**: ✅ = Enabled by default, 🔧 = Flag required
+
 ## Installation
 
 ```bash
@@ -27,9 +55,11 @@ go build -o netcheck
 ./netcheck
 ```
 
-### Comprehensive mDNS Service Discovery
+### Run Specific Detectors
 ```bash
-./netcheck --mdns
+./netcheck --mdns              # mDNS service discovery
+./netcheck --external --proxy  # External IP with proxy testing
+./netcheck --all               # All available tests
 ```
 
 ## Example Output
@@ -68,82 +98,28 @@ Issues Found: 3
    UPnP can expose internal services and allow port forwarding
 ```
 
-## Security Checks
+## Security Analysis
 
-### Router Interface Analysis
-- Default setup page detection
-- Vendor identification via page content
-- Title and content analysis
+The tool performs comprehensive security analysis including:
 
-### Credential Testing
-- Vendor-specific default credential databases
-- HTTP Basic Authentication testing
-- Common router login combinations
+- **Default Credentials**: Tests vendor-specific default login combinations
+- **Service Discovery**: UPnP/SSDP, NAT-PMP, mDNS/Bonjour, IPv6 configuration
+- **Port Scanning**: Common management ports (SSH, HTTP, HTTPS, SNMP, Telnet)
+- **API Enumeration**: Router APIs, CGI scripts, WPS configuration
+- **Device Fingerprinting**: Vendor, model, and serial number identification
 
-### Service Discovery
-- **UPnP/SSDP**: Internet Gateway Device discovery and port mapping enumeration
-- **NAT-PMP**: Network Address Translation Port Mapping Protocol detection
-- **mDNS/Bonjour**: Multicast DNS service discovery (with `--mdns` flag)
-- **IPv6**: Configuration analysis and gateway accessibility
+## Supported Vendors
 
-### Port Scanning
-- Common management ports (SSH, Telnet, HTTP, HTTPS, SNMP)
-- Service-specific security assessments
-- Protocol exposure analysis
+Linksys, Netgear, D-Link, TP-Link, ASUS, Cisco, Belkin, Motorola, and others.
 
-### API Enumeration
-- Common router API endpoints
-- CGI script discovery
-- Remote management interface detection
-- WPS (WiFi Protected Setup) configuration checks
+## Security Issues
 
-## Supported Router Vendors
+Issues are categorized by severity:
 
-- Linksys
-- Netgear
-- D-Link
-- TP-Link
-- ASUS
-- Cisco
-- Belkin
-- Motorola
-
-## Security Issues Detected
-
-### Critical
-- Active default credentials
-- Exposed administrative interfaces
-
-### High
-- Active UPnP port mappings
-- Telnet service exposure
-- Exposed CGI scripts/remote management
-
-### Medium
-- UPnP/NAT-PMP services enabled
-- SSH service exposure
-- IPv6 configuration issues
-- WPS enabled
-- SNMP exposure
-
-### Low
-- mDNS service exposure
-- General information disclosure
-
-## Architecture
-
-The tool is built with a modular architecture:
-
-- `main.go`: Core logic and basic security functions
-- `upnp.go`: UPnP/SSDP discovery and port mapping enumeration
-- `mdns.go`: mDNS service discovery and analysis
-
-## Use Cases
-
-- **Home Network Security**: Quick assessment of family/friends' router security
-- **Security Auditing**: Professional network security assessments
-- **IoT Security**: Discovery of exposed devices and services
-- **Network Documentation**: Inventory of active services and configurations
+- **🚨 Critical**: Default credentials, exposed admin interfaces
+- **⚠️ High**: Active UPnP port mappings, Telnet exposure, exposed CGI scripts
+- **🔶 Medium**: UPnP/NAT-PMP enabled, SSH exposure, IPv6 issues, WPS enabled
+- **ℹ️ Low**: mDNS exposure, information disclosure
 
 ## Contributing
 

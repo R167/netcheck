@@ -70,6 +70,11 @@ func getIPv6Information() []IPv6InterfaceInfo {
 	}
 
 	for _, iface := range ifaces {
+		// Skip virtual interfaces unless --show-virtual flag is set
+		if !*showVirtualFlag && isVirtualInterface(iface.Name) {
+			continue
+		}
+
 		ipv6Info := IPv6InterfaceInfo{
 			Name: iface.Name,
 			MTU:  iface.MTU,
