@@ -40,6 +40,14 @@ A comprehensive network gateway security assessment tool for identifying vulnera
 
 **Legend**: ✅ = Enabled by default, 🔧 = Flag required
 
+## Quick Start
+
+Try netcheck without installation:
+
+```bash
+go run github.com/R167/netcheck@latest
+```
+
 ## Installation
 
 ```bash
