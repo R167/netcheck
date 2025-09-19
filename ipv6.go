@@ -10,30 +10,30 @@ import (
 
 // IPv6AddressInfo represents detailed information about an IPv6 address
 type IPv6AddressInfo struct {
-	Address     string
-	Prefix      string
-	Interface   string
-	Type        string
-	Scope       string
-	Status      string
-	Source      string
-	Preferred   bool
-	Temporary   bool
-	Deprecated  bool
+	Address    string
+	Prefix     string
+	Interface  string
+	Type       string
+	Scope      string
+	Status     string
+	Source     string
+	Preferred  bool
+	Temporary  bool
+	Deprecated bool
 }
 
 // IPv6InterfaceInfo represents IPv6 configuration for an interface
 type IPv6InterfaceInfo struct {
-	Name              string
-	Addresses         []IPv6AddressInfo
-	LinkLocalAddress  string
-	GlobalAddresses   []string
-	ULAAddresses      []string
-	TempAddresses     []string
-	RouterAddress     string
-	MTU               int
-	HopLimit          int
-	Flags             []string
+	Name             string
+	Addresses        []IPv6AddressInfo
+	LinkLocalAddress string
+	GlobalAddresses  []string
+	ULAAddresses     []string
+	TempAddresses    []string
+	RouterAddress    string
+	MTU              int
+	HopLimit         int
+	Flags            []string
 }
 
 func checkIPv6(router *RouterInfo) {
@@ -265,7 +265,7 @@ func enhanceIPv6Info(info *IPv6InterfaceInfo) {
 func getIPv6HopLimit(ifaceName string) int {
 	// Try different system commands to get hop limit
 	commands := [][]string{
-		{"sysctl", "-n", fmt.Sprintf("net.inet6.ip6.hlim")}, // macOS
+		{"sysctl", "-n", fmt.Sprintf("net.inet6.ip6.hlim")},                     // macOS
 		{"cat", fmt.Sprintf("/proc/sys/net/ipv6/conf/%s/hop_limit", ifaceName)}, // Linux
 	}
 
@@ -287,7 +287,7 @@ func getIPv6Router(ifaceName string) string {
 	// Try different methods to find router
 	commands := [][]string{
 		{"route", "-n", "get", "-inet6", "default"}, // macOS
-		{"ip", "-6", "route", "show", "default"},     // Linux
+		{"ip", "-6", "route", "show", "default"},    // Linux
 	}
 
 	for _, cmd := range commands {
@@ -426,8 +426,8 @@ func testIPv6Gateway(router *RouterInfo) {
 
 	// Common IPv6 gateway patterns to test
 	gatewayPatterns := []string{
-		"fe80::1",           // Common link-local gateway
-		"::1",               // Loopback
+		"fe80::1",              // Common link-local gateway
+		"::1",                  // Loopback
 		"2001:4860:4860::8888", // Google DNS
 		"2606:4700:4700::1111", // Cloudflare DNS
 	}

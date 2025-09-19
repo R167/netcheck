@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/R167/netcheck/internal/checker"
 	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/checker"
 )
 
 type WebChecker struct{}

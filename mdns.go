@@ -253,16 +253,16 @@ done:
 // checkRiskyMDNSService identifies potentially risky services
 func checkRiskyMDNSService(router *RouterInfo, service MDNSService) {
 	riskyServices := map[string]string{
-		"_ssh._tcp.local":          "SSH service exposed",
-		"_ftp._tcp.local":          "FTP service exposed",
-		"_telnet._tcp.local":       "Telnet service exposed",
-		"_vnc._tcp.local":          "VNC service exposed",
-		"_rdp._tcp.local":          "RDP service exposed",
-		"_smb._tcp.local":          "SMB/CIFS file sharing exposed",
-		"_nfs._tcp.local":          "NFS file sharing exposed",
-		"_afpovertcp._tcp.local":   "Apple Filing Protocol exposed",
-		"_printer._tcp.local":      "Network printer exposed",
-		"_ipp._tcp.local":          "Internet Printing Protocol exposed",
+		"_ssh._tcp.local":        "SSH service exposed",
+		"_ftp._tcp.local":        "FTP service exposed",
+		"_telnet._tcp.local":     "Telnet service exposed",
+		"_vnc._tcp.local":        "VNC service exposed",
+		"_rdp._tcp.local":        "RDP service exposed",
+		"_smb._tcp.local":        "SMB/CIFS file sharing exposed",
+		"_nfs._tcp.local":        "NFS file sharing exposed",
+		"_afpovertcp._tcp.local": "Apple Filing Protocol exposed",
+		"_printer._tcp.local":    "Network printer exposed",
+		"_ipp._tcp.local":        "Internet Printing Protocol exposed",
 	}
 
 	if description, isRisky := riskyServices[service.Type]; isRisky {

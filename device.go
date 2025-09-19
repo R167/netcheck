@@ -11,20 +11,20 @@ import (
 func isVirtualInterface(name string) bool {
 	// Common virtual interface prefixes across different systems
 	virtualPrefixes := []string{
-		"utun",     // macOS VPN tunnels
-		"awdl",     // macOS Apple Wireless Direct Link
-		"llw",      // macOS Low latency WLAN interface
-		"bridge",   // Bridge interfaces
-		"veth",     // Linux virtual ethernet (Docker)
-		"docker",   // Docker interfaces
-		"virbr",    // Virtual bridge (libvirt)
-		"vnet",     // Virtual network interfaces
-		"tap",      // TAP interfaces
-		"tun",      // TUN interfaces (generic)
-		"gif",      // Generic tunnel interface
-		"stf",      // 6to4 tunnel interface
-		"anpi",     // macOS internal interfaces
-		"ap",       // macOS access point interface
+		"utun",   // macOS VPN tunnels
+		"awdl",   // macOS Apple Wireless Direct Link
+		"llw",    // macOS Low latency WLAN interface
+		"bridge", // Bridge interfaces
+		"veth",   // Linux virtual ethernet (Docker)
+		"docker", // Docker interfaces
+		"virbr",  // Virtual bridge (libvirt)
+		"vnet",   // Virtual network interfaces
+		"tap",    // TAP interfaces
+		"tun",    // TUN interfaces (generic)
+		"gif",    // Generic tunnel interface
+		"stf",    // 6to4 tunnel interface
+		"anpi",   // macOS internal interfaces
+		"ap",     // macOS access point interface
 	}
 
 	// Check if the interface starts with any virtual prefix
@@ -193,8 +193,8 @@ func getDHCPInformation() []string {
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
 			if strings.Contains(line, "server_identifier") ||
-			   strings.Contains(line, "lease_time") ||
-			   strings.Contains(line, "domain_name") {
+				strings.Contains(line, "lease_time") ||
+				strings.Contains(line, "domain_name") {
 				info = append(info, line)
 			}
 		}
@@ -321,8 +321,8 @@ func getHardwareInformation() []string {
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
 			if strings.Contains(line, "Model Name") ||
-			   strings.Contains(line, "Processor") ||
-			   strings.Contains(line, "Memory") {
+				strings.Contains(line, "Processor") ||
+				strings.Contains(line, "Memory") {
 				info = append(info, line)
 			}
 		}

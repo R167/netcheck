@@ -29,7 +29,7 @@ const (
 // Common timeouts
 const (
 	HTTPTimeout   = 5 * time.Second
-	PortTimeout   = 1 * time.Second  // Reduced from 2s for faster scanning on restricted networks
+	PortTimeout   = 1 * time.Second // Reduced from 2s for faster scanning on restricted networks
 	NATpmpTimeout = 3 * time.Second
 )
 
@@ -75,13 +75,13 @@ type PortMapping struct {
 }
 
 type UPnPDevice struct {
-	DeviceType         string `xml:"device>deviceType"`
-	FriendlyName       string `xml:"device>friendlyName"`
-	Manufacturer       string `xml:"device>manufacturer"`
-	ModelName          string `xml:"device>modelName"`
-	ModelNumber        string `xml:"device>modelNumber"`
-	SerialNumber       string `xml:"device>serialNumber"`
-	PresentationURL    string `xml:"device>presentationURL"`
+	DeviceType      string `xml:"device>deviceType"`
+	FriendlyName    string `xml:"device>friendlyName"`
+	Manufacturer    string `xml:"device>manufacturer"`
+	ModelName       string `xml:"device>modelName"`
+	ModelNumber     string `xml:"device>modelNumber"`
+	SerialNumber    string `xml:"device>serialNumber"`
+	PresentationURL string `xml:"device>presentationURL"`
 }
 
 type SSDPResponse struct {
@@ -91,32 +91,31 @@ type SSDPResponse struct {
 }
 
 type MDNSService struct {
-	Name     string
-	Type     string
-	Domain   string
-	IP       string
-	Port     int
-	TXTData  []string
+	Name    string
+	Type    string
+	Domain  string
+	IP      string
+	Port    int
+	TXTData []string
 }
-
 
 var (
 	// Test category flags
-	allFlag        = flag.Bool("all", false, "Run all available tests")
-	defaultFlag    = flag.Bool("default", false, "Run default test suite (same as no flags)")
-	webFlag        = flag.Bool("web", false, "Test web interface and default credentials")
-	portsFlag      = flag.Bool("ports", false, "Scan common management ports")
-	upnpFlag       = flag.Bool("upnp", false, "Test UPnP services and port mappings")
-	natpmpFlag     = flag.Bool("natpmp", false, "Test NAT-PMP services")
-	ipv6Flag       = flag.Bool("ipv6", false, "Check IPv6 configuration")
-	mdnsFlag       = flag.Bool("mdns", false, "Perform comprehensive mDNS service discovery")
-	apiFlag        = flag.Bool("api", false, "Check for exposed router APIs")
-	starlinkFlag   = flag.Bool("starlink", false, "Check for Starlink Dishy")
-	routesFlag     = flag.Bool("routes", false, "Display routing information")
-	deviceFlag     = flag.Bool("device", false, "Display interface/device information")
-	externalFlag   = flag.Bool("external", false, "Discover external IPv4/IPv6 addresses")
-	proxyFlag      = flag.Bool("proxy", false, "Test proxy configuration (requires --external)")
-	lldpFlag       = flag.Bool("lldp", false, "Link layer discovery and debugging")
+	allFlag      = flag.Bool("all", false, "Run all available tests")
+	defaultFlag  = flag.Bool("default", false, "Run default test suite (same as no flags)")
+	webFlag      = flag.Bool("web", false, "Test web interface and default credentials")
+	portsFlag    = flag.Bool("ports", false, "Scan common management ports")
+	upnpFlag     = flag.Bool("upnp", false, "Test UPnP services and port mappings")
+	natpmpFlag   = flag.Bool("natpmp", false, "Test NAT-PMP services")
+	ipv6Flag     = flag.Bool("ipv6", false, "Check IPv6 configuration")
+	mdnsFlag     = flag.Bool("mdns", false, "Perform comprehensive mDNS service discovery")
+	apiFlag      = flag.Bool("api", false, "Check for exposed router APIs")
+	starlinkFlag = flag.Bool("starlink", false, "Check for Starlink Dishy")
+	routesFlag   = flag.Bool("routes", false, "Display routing information")
+	deviceFlag   = flag.Bool("device", false, "Display interface/device information")
+	externalFlag = flag.Bool("external", false, "Discover external IPv4/IPv6 addresses")
+	proxyFlag    = flag.Bool("proxy", false, "Test proxy configuration (requires --external)")
+	lldpFlag     = flag.Bool("lldp", false, "Link layer discovery and debugging")
 
 	// Global configuration flags
 	mcpFlag         = flag.Bool("mcp", false, "Run in MCP server mode (stdout)")
@@ -279,47 +278,47 @@ func getGatewayIP() string {
 
 func toCommonRouter(r *RouterInfo) *common.RouterInfo {
 	cr := &common.RouterInfo{
-		IP: r.IP,
-		Vendor: r.Vendor,
-		Model: r.Model,
-		SerialNumber: r.SerialNumber,
-		ExternalIP: r.ExternalIP,
-		WebInterface: r.WebInterface,
-		DefaultCreds: r.DefaultCreds,
-		OpenPorts: r.OpenPorts,
-		UPnPEnabled: r.UPnPEnabled,
+		IP:            r.IP,
+		Vendor:        r.Vendor,
+		Model:         r.Model,
+		SerialNumber:  r.SerialNumber,
+		ExternalIP:    r.ExternalIP,
+		WebInterface:  r.WebInterface,
+		DefaultCreds:  r.DefaultCreds,
+		OpenPorts:     r.OpenPorts,
+		UPnPEnabled:   r.UPnPEnabled,
 		NATpmpEnabled: r.NATpmpEnabled,
-		IPv6Enabled: r.IPv6Enabled,
-		MDNSEnabled: r.MDNSEnabled,
-		PortMappings: make([]common.PortMapping, 0),
-		MDNSServices: make([]common.MDNSService, 0),
-		Issues: make([]common.SecurityIssue, 0),
-		Starlink: r.Starlink,
+		IPv6Enabled:   r.IPv6Enabled,
+		MDNSEnabled:   r.MDNSEnabled,
+		PortMappings:  make([]common.PortMapping, 0),
+		MDNSServices:  make([]common.MDNSService, 0),
+		Issues:        make([]common.SecurityIssue, 0),
+		Starlink:      r.Starlink,
 	}
 	for _, pm := range r.PortMappings {
 		cr.PortMappings = append(cr.PortMappings, common.PortMapping{
 			ExternalPort: pm.ExternalPort,
-			InternalIP: pm.InternalIP,
+			InternalIP:   pm.InternalIP,
 			InternalPort: pm.InternalPort,
-			Protocol: pm.Protocol,
-			Description: pm.Description,
+			Protocol:     pm.Protocol,
+			Description:  pm.Description,
 		})
 	}
 	for _, ms := range r.MDNSServices {
 		cr.MDNSServices = append(cr.MDNSServices, common.MDNSService{
-			Name: ms.Name,
-			Type: ms.Type,
-			Domain: ms.Domain,
-			IP: ms.IP,
-			Port: ms.Port,
+			Name:    ms.Name,
+			Type:    ms.Type,
+			Domain:  ms.Domain,
+			IP:      ms.IP,
+			Port:    ms.Port,
 			TXTData: ms.TXTData,
 		})
 	}
 	for _, iss := range r.Issues {
 		cr.Issues = append(cr.Issues, common.SecurityIssue{
-			Severity: iss.Severity,
+			Severity:    iss.Severity,
 			Description: iss.Description,
-			Details: iss.Details,
+			Details:     iss.Details,
 		})
 	}
 	return cr
@@ -341,21 +340,21 @@ func fromCommonRouter(r *RouterInfo, cr *common.RouterInfo) {
 	for _, pm := range cr.PortMappings {
 		r.PortMappings = append(r.PortMappings, PortMapping{
 			ExternalPort: pm.ExternalPort,
-			InternalIP: pm.InternalIP,
+			InternalIP:   pm.InternalIP,
 			InternalPort: pm.InternalPort,
-			Protocol: pm.Protocol,
-			Description: pm.Description,
+			Protocol:     pm.Protocol,
+			Description:  pm.Description,
 		})
 	}
 
 	r.MDNSServices = make([]MDNSService, 0)
 	for _, ms := range cr.MDNSServices {
 		r.MDNSServices = append(r.MDNSServices, MDNSService{
-			Name: ms.Name,
-			Type: ms.Type,
-			Domain: ms.Domain,
-			IP: ms.IP,
-			Port: ms.Port,
+			Name:    ms.Name,
+			Type:    ms.Type,
+			Domain:  ms.Domain,
+			IP:      ms.IP,
+			Port:    ms.Port,
 			TXTData: ms.TXTData,
 		})
 	}
@@ -363,9 +362,9 @@ func fromCommonRouter(r *RouterInfo, cr *common.RouterInfo) {
 	r.Issues = make([]SecurityIssue, 0)
 	for _, iss := range cr.Issues {
 		r.Issues = append(r.Issues, SecurityIssue{
-			Severity: iss.Severity,
+			Severity:    iss.Severity,
 			Description: iss.Description,
-			Details: iss.Details,
+			Details:     iss.Details,
 		})
 	}
 }
@@ -414,7 +413,6 @@ func sendNATpmpRequest(gatewayIP string) bool {
 	// Version should be 0, opcode should be 128 (0x80 + 0), result should be 0 for success
 	return response[0] == 0 && response[1] == 128 && response[2] == 0 && response[3] == 0
 }
-
 
 // APIEndpoint represents a router API endpoint with security implications
 type APIEndpoint struct {
@@ -663,11 +661,11 @@ func printRecommendations(router *RouterInfo) {
 
 // Check represents a security check or information gathering function
 type Check struct {
-	Name         string
-	Description  string
-	Icon         string
-	Flag         *bool
-	RunFunc      func(*RouterInfo)
+	Name           string
+	Description    string
+	Icon           string
+	Flag           *bool
+	RunFunc        func(*RouterInfo)
 	StandaloneFunc func()
 	RequiresRouter bool
 	DefaultEnabled bool
@@ -698,11 +696,11 @@ func buildChecksRegistry() []Check {
 		checkerName := checker.Name()
 		checkerConfig := checker.DefaultConfig()
 		checks = append(checks, Check{
-			Name:           checkerName,
-			Description:    checker.Description(),
-			Icon:           checker.Icon(),
-			Flag:           flagMap[checkerName],
-			RunFunc:        func(r *RouterInfo) {
+			Name:        checkerName,
+			Description: checker.Description(),
+			Icon:        checker.Icon(),
+			Flag:        flagMap[checkerName],
+			RunFunc: func(r *RouterInfo) {
 				cr := toCommonRouter(r)
 				checkers.RunChecker(checkerName, checkerConfig, cr)
 				fromCommonRouter(r, cr)
@@ -803,11 +801,3 @@ func buildChecksRegistry() []Check {
 
 // Global check registry - built dynamically from checker packages
 var checks = buildChecksRegistry()
-
-
-
-
-
-
-
-

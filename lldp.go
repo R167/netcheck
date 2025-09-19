@@ -17,13 +17,13 @@ const (
 
 // LLDPNeighbor represents an LLDP neighbor device
 type LLDPNeighbor struct {
-	ChassisID     string
-	PortID        string
-	SystemName    string
-	SystemDesc    string
-	Capabilities  []string
-	ManagementIP  string
-	Interface     string
+	ChassisID    string
+	PortID       string
+	SystemName   string
+	SystemDesc   string
+	Capabilities []string
+	ManagementIP string
+	Interface    string
 }
 
 func checkLLDP() {

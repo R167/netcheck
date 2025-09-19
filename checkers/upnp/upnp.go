@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R167/netcheck/internal/checker"
 	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/checker"
 )
 
 type UPnPChecker struct{}
