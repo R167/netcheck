@@ -1,4 +1,4 @@
-package main
+package mdns
 
 import (
 	"context"
@@ -11,12 +11,82 @@ import (
 	"time"
 
 	"github.com/hashicorp/mdns"
+
+	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/checker"
 )
 
-func checkMDNS(router *RouterInfo) {
+type MDNSChecker struct{}
+
+type MDNSConfig struct {
+	Detailed bool
+}
+
+func NewMDNSChecker() checker.Checker {
+	return &MDNSChecker{}
+}
+
+func (c *MDNSChecker) Name() string {
+	return "mdns"
+}
+
+func (c *MDNSChecker) Description() string {
+	return "Multicast DNS service discovery and analysis"
+}
+
+func (c *MDNSChecker) Icon() string {
+	return "🔍"
+}
+
+func (c *MDNSChecker) DefaultConfig() checker.CheckerConfig {
+	return MDNSConfig{
+		Detailed: false,
+	}
+}
+
+func (c *MDNSChecker) RequiresRouter() bool {
+	return true
+}
+
+func (c *MDNSChecker) DefaultEnabled() bool {
+	return true
+}
+
+func (c *MDNSChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+	cfg := config.(MDNSConfig)
+	checkMDNS(router, cfg)
+}
+
+func (c *MDNSChecker) RunStandalone(config checker.CheckerConfig) {
+	// Router-based checker - no standalone functionality
+}
+
+func (c *MDNSChecker) MCPToolDefinition() *checker.MCPTool {
+	return &checker.MCPTool{
+		Name:        "check_mdns",
+		Description: "Discover mDNS/Bonjour services and assess security implications",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"gateway_ip": map[string]interface{}{
+					"type":        "string",
+					"description": "The IP address of the router gateway",
+				},
+				"detailed": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Perform detailed mDNS service enumeration",
+					"default":     false,
+				},
+			},
+			"required": []string{"gateway_ip"},
+		},
+	}
+}
+
+func checkMDNS(router *common.RouterInfo, cfg MDNSConfig) {
 	fmt.Println("🔍 Checking mDNS/Bonjour services...")
 
-	if *mdnsFlag {
+	if cfg.Detailed {
 		// Comprehensive mDNS service discovery
 		services := discoverMDNSServices()
 		router.MDNSServices = services
@@ -36,8 +106,8 @@ func checkMDNS(router *RouterInfo) {
 				checkRiskyMDNSService(router, service)
 			}
 
-			router.Issues = append(router.Issues, SecurityIssue{
-				Severity:    "LOW",
+			router.Issues = append(router.Issues, common.SecurityIssue{
+				Severity:    common.SeverityLow,
 				Description: "mDNS services discovered",
 				Details:     fmt.Sprintf("Found %d services advertising via mDNS. Review if all should be exposed.", len(services)),
 			})
@@ -48,12 +118,12 @@ func checkMDNS(router *RouterInfo) {
 		// Basic mDNS detection
 		if sendMDNSQuery() {
 			router.MDNSEnabled = true
-			fmt.Println("  📡 mDNS service detected (use --mdns for detailed scan)")
+			fmt.Println("  📡 mDNS service detected (use detailed flag for comprehensive scan)")
 
-			router.Issues = append(router.Issues, SecurityIssue{
-				Severity:    "LOW",
+			router.Issues = append(router.Issues, common.SecurityIssue{
+				Severity:    common.SeverityLow,
 				Description: "mDNS service is enabled",
-				Details:     "mDNS can expose device information to the local network. Use --mdns flag for detailed discovery.",
+				Details:     "mDNS can expose device information to the local network. Use detailed flag for comprehensive discovery.",
 			})
 		} else {
 			fmt.Println("  ✅ No mDNS service detected")
@@ -100,13 +170,13 @@ func sendMDNSQuery() bool {
 	return err == nil && n > 12 // Basic validation that we got a response
 }
 
-func discoverMDNSServices() []MDNSService {
+func discoverMDNSServices() []common.MDNSService {
 	// Suppress mdns library log output to reduce noise from IPv6 errors
 	log.SetOutput(io.Discard)
 	defer log.SetOutput(os.Stderr)
 
-	var services []MDNSService
-	serviceMap := make(map[string]*MDNSService) // Use map to avoid duplicates
+	var services []common.MDNSService
+	serviceMap := make(map[string]*common.MDNSService) // Use map to avoid duplicates
 
 	// Common service types to query
 	serviceTypes := []string{
@@ -210,7 +280,7 @@ func discoverMDNSServices() []MDNSService {
 						}
 					}
 
-					service := &MDNSService{
+					service := &common.MDNSService{
 						Name:    entry.Name,
 						Type:    serviceType,
 						IP:      ip,
@@ -251,7 +321,7 @@ done:
 }
 
 // checkRiskyMDNSService identifies potentially risky services
-func checkRiskyMDNSService(router *RouterInfo, service MDNSService) {
+func checkRiskyMDNSService(router *common.RouterInfo, service common.MDNSService) {
 	riskyServices := map[string]string{
 		"_ssh._tcp.local":        "SSH service exposed",
 		"_ftp._tcp.local":        "FTP service exposed",
@@ -266,8 +336,8 @@ func checkRiskyMDNSService(router *RouterInfo, service MDNSService) {
 	}
 
 	if description, isRisky := riskyServices[service.Type]; isRisky {
-		router.Issues = append(router.Issues, SecurityIssue{
-			Severity:    "MEDIUM",
+		router.Issues = append(router.Issues, common.SecurityIssue{
+			Severity:    common.SeverityMedium,
 			Description: description + " via mDNS",
 			Details:     fmt.Sprintf("Service %s at %s:%d is advertising via mDNS", service.Name, service.IP, service.Port),
 		})

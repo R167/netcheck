@@ -1,10 +1,65 @@
-package main
+package routes
 
 import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/checker"
 )
+
+type RoutesChecker struct{}
+
+type RoutesConfig struct{}
+
+func NewRoutesChecker() checker.Checker {
+	return &RoutesChecker{}
+}
+
+func (c *RoutesChecker) Name() string {
+	return "routes"
+}
+
+func (c *RoutesChecker) Description() string {
+	return "System routing table analysis"
+}
+
+func (c *RoutesChecker) Icon() string {
+	return "📍"
+}
+
+func (c *RoutesChecker) DefaultConfig() checker.CheckerConfig {
+	return RoutesConfig{}
+}
+
+func (c *RoutesChecker) RequiresRouter() bool {
+	return false
+}
+
+func (c *RoutesChecker) DefaultEnabled() bool {
+	return true
+}
+
+func (c *RoutesChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+	// Standalone checker - no router-based functionality
+}
+
+func (c *RoutesChecker) RunStandalone(config checker.CheckerConfig) {
+	checkRoutes()
+}
+
+func (c *RoutesChecker) MCPToolDefinition() *checker.MCPTool {
+	return &checker.MCPTool{
+		Name:        "check_routes",
+		Description: "Display system routing table information for both IPv4 and IPv6",
+		InputSchema: map[string]interface{}{
+			"type":       "object",
+			"properties": map[string]interface{}{},
+			"required":   []string{},
+		},
+	}
+}
 
 // checkRoutes displays the system's routing table information
 func checkRoutes() {

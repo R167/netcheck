@@ -4,9 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"net"
-	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -369,186 +367,6 @@ func fromCommonRouter(r *RouterInfo, cr *common.RouterInfo) {
 	}
 }
 
-func checkNATpmp(router *RouterInfo) {
-	fmt.Println("\n🔍 Checking NAT-PMP...")
-
-	// Send NAT-PMP external address request
-	if sendNATpmpRequest(router.IP) {
-		router.NATpmpEnabled = true
-		fmt.Println("  📡 NAT-PMP service detected")
-
-		router.Issues = append(router.Issues, SecurityIssue{
-			Severity:    SeverityMedium,
-			Description: "NAT-PMP service is enabled",
-			Details:     "NAT-PMP allows automatic port mapping. Ensure it's properly secured.",
-		})
-	} else {
-		fmt.Println("  ✅ No NAT-PMP service detected")
-	}
-}
-
-func sendNATpmpRequest(gatewayIP string) bool {
-	conn, err := net.Dial("udp", gatewayIP+":5351")
-	if err != nil {
-		return false
-	}
-	defer conn.Close()
-
-	// NAT-PMP external address request: version=0, opcode=0
-	request := []byte{0, 0}
-
-	conn.SetDeadline(time.Now().Add(NATpmpTimeout))
-	_, err = conn.Write(request)
-	if err != nil {
-		return false
-	}
-
-	response := make([]byte, 12)
-	n, err := conn.Read(response)
-	if err != nil || n < 8 {
-		return false
-	}
-
-	// Check if response is valid NAT-PMP response
-	// Version should be 0, opcode should be 128 (0x80 + 0), result should be 0 for success
-	return response[0] == 0 && response[1] == 128 && response[2] == 0 && response[3] == 0
-}
-
-// APIEndpoint represents a router API endpoint with security implications
-type APIEndpoint struct {
-	Path        string
-	Description string
-	Severity    string
-}
-
-// Common router API endpoints
-var routerAPIEndpoints = []APIEndpoint{
-	{"/api/", "Generic API endpoint", SeverityMedium},
-	{"/cgi-bin/", "CGI scripts", SeverityHigh},
-	{"/status.xml", "Status XML", SeverityLow},
-	{"/info.html", "Device info", SeverityLow},
-	{"/system.xml", "System XML", SeverityMedium},
-	{"/wan.xml", "WAN configuration", SeverityMedium},
-	{"/wireless.xml", "Wireless config", SeverityMedium},
-	{"/tr069", "TR-069 management", SeverityHigh},
-	{"/remote/", "Remote management", SeverityHigh},
-	{"/goform/", "Form handlers", SeverityMedium},
-	{"/boaform/", "BOA form handlers", SeverityMedium},
-}
-
-func checkRouterAPIs(router *RouterInfo) {
-	fmt.Println("\n🔍 Checking for exposed APIs and services...")
-
-	client := &http.Client{Timeout: HTTPTimeout}
-
-	foundAPIs := 0
-	for _, endpoint := range routerAPIEndpoints {
-		url := fmt.Sprintf("http://%s%s", router.IP, endpoint.Path)
-		resp, err := client.Get(url)
-		if err != nil {
-			continue
-		}
-		resp.Body.Close()
-
-		if resp.StatusCode == 200 {
-			foundAPIs++
-			fmt.Printf("  🔍 Found: %s (%s)\n", endpoint.Path, endpoint.Description)
-
-			if endpoint.Severity == SeverityHigh {
-				router.Issues = append(router.Issues, SecurityIssue{
-					Severity:    endpoint.Severity,
-					Description: fmt.Sprintf("Exposed %s", endpoint.Description),
-					Details:     fmt.Sprintf("Endpoint %s is accessible and may expose sensitive functionality", endpoint.Path),
-				})
-			}
-		}
-	}
-
-	if foundAPIs == 0 {
-		fmt.Println("  ✅ No suspicious API endpoints detected")
-	}
-
-	// Check for WPS (WiFi Protected Setup)
-	checkWPS(router)
-}
-
-// Common WPS-related paths
-var wpsPaths = []string{
-	"/wps.html",
-	"/wireless_wps.html",
-	"/wps_setup.html",
-	"/advanced_wireless_wps.html",
-}
-
-func checkWPS(router *RouterInfo) {
-	fmt.Println("\n🔍 Checking WPS configuration...")
-
-	client := &http.Client{Timeout: HTTPTimeout}
-
-	for _, path := range wpsPaths {
-		url := fmt.Sprintf("http://%s%s", router.IP, path)
-		resp, err := client.Get(url)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == 200 {
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				continue
-			}
-
-			content := strings.ToLower(string(body))
-			if strings.Contains(content, "wps") && strings.Contains(content, "enabled") {
-				fmt.Println("  ⚠️  WPS may be enabled")
-
-				router.Issues = append(router.Issues, SecurityIssue{
-					Severity:    SeverityMedium,
-					Description: "WPS (WiFi Protected Setup) may be enabled",
-					Details:     "WPS has known security vulnerabilities and should be disabled if not needed.",
-				})
-				return
-			}
-		}
-	}
-
-	fmt.Println("  ℹ️  WPS configuration not accessible")
-}
-
-func checkStarlink(router *RouterInfo) {
-	fmt.Println("🛰️  Checking for Starlink Dishy...")
-
-	starlinkInfo := starlink.CheckStarlink()
-	router.Starlink = starlinkInfo
-
-	if starlinkInfo.Accessible {
-		fmt.Println("  📡 Starlink Dishy detected and accessible")
-
-		if starlinkInfo.DeviceInfo != nil {
-			fmt.Printf("  🔧 Hardware: %s\n", starlinkInfo.DeviceInfo.HardwareVersion)
-			fmt.Printf("  💾 Software: %s\n", starlinkInfo.DeviceInfo.SoftwareVersion)
-		}
-
-		if len(starlinkInfo.SecurityIssues) > 0 {
-			fmt.Printf("  ⚠️  Found %d security issue(s)\n", len(starlinkInfo.SecurityIssues))
-
-			// Add Starlink security issues to router issues with proper format conversion
-			for _, issue := range starlinkInfo.SecurityIssues {
-				router.Issues = append(router.Issues, SecurityIssue{
-					Severity:    issue.Severity,
-					Description: issue.Title,
-					Details:     issue.Description + ". " + issue.Impact + " " + issue.Remediation,
-				})
-			}
-		} else {
-			fmt.Println("  ✅ No security issues detected")
-		}
-	} else {
-		fmt.Println("  ℹ️  No Starlink Dishy detected on network")
-	}
-}
-
 func generateReport(router *RouterInfo) {
 	fmt.Println("\n📊 Security Assessment Report")
 	fmt.Println("=============================")
@@ -671,7 +489,7 @@ type Check struct {
 	DefaultEnabled bool
 }
 
-// buildChecksRegistry creates the checks array by combining migrated checkers and legacy checks
+// buildChecksRegistry creates the checks array from checker packages
 func buildChecksRegistry() []Check {
 	var checks []Check
 
@@ -691,111 +509,38 @@ func buildChecksRegistry() []Check {
 		"lldp":     lldpFlag,
 	}
 
-	// Add checkers from the registry
+	// Build checks from the checker registry
 	for _, checker := range checkers.AllCheckers() {
 		checkerName := checker.Name()
 		checkerConfig := checker.DefaultConfig()
-		checks = append(checks, Check{
-			Name:        checkerName,
-			Description: checker.Description(),
-			Icon:        checker.Icon(),
-			Flag:        flagMap[checkerName],
-			RunFunc: func(r *RouterInfo) {
+
+		var runFunc func(*RouterInfo)
+		var standaloneFunc func()
+
+		if checker.RequiresRouter() {
+			runFunc = func(r *RouterInfo) {
 				cr := toCommonRouter(r)
 				checkers.RunChecker(checkerName, checkerConfig, cr)
 				fromCommonRouter(r, cr)
-			},
+			}
+		} else {
+			standaloneFunc = func() {
+				checkers.RunStandaloneChecker(checkerName, checkerConfig)
+			}
+		}
+
+		checks = append(checks, Check{
+			Name:           checkerName,
+			Description:    checker.Description(),
+			Icon:           checker.Icon(),
+			Flag:           flagMap[checkerName],
+			RunFunc:        runFunc,
+			StandaloneFunc: standaloneFunc,
 			RequiresRouter: checker.RequiresRouter(),
 			DefaultEnabled: checker.DefaultEnabled(),
 		})
 	}
 
-	// Add legacy checks that haven't been migrated yet
-	legacyChecks := []Check{
-		{
-			Name:           "natpmp",
-			Description:    "NAT-PMP services",
-			Icon:           "🔍",
-			Flag:           natpmpFlag,
-			RunFunc:        checkNATpmp,
-			RequiresRouter: true,
-			DefaultEnabled: true,
-		},
-		{
-			Name:           "ipv6",
-			Description:    "IPv6 configuration",
-			Icon:           "🔍",
-			Flag:           ipv6Flag,
-			RunFunc:        checkIPv6,
-			RequiresRouter: true,
-			DefaultEnabled: true,
-		},
-		{
-			Name:           "mdns",
-			Description:    "mDNS service discovery",
-			Icon:           "📡",
-			Flag:           mdnsFlag,
-			RunFunc:        checkMDNS,
-			RequiresRouter: true,
-			DefaultEnabled: false,
-		},
-		{
-			Name:           "api",
-			Description:    "Router APIs and services",
-			Icon:           "🔍",
-			Flag:           apiFlag,
-			RunFunc:        checkRouterAPIs,
-			RequiresRouter: true,
-			DefaultEnabled: true,
-		},
-		{
-			Name:           "starlink",
-			Description:    "Starlink Dishy detection",
-			Icon:           "🛰️",
-			Flag:           starlinkFlag,
-			RunFunc:        checkStarlink,
-			RequiresRouter: true,
-			DefaultEnabled: false,
-		},
-		{
-			Name:           "routes",
-			Description:    "Routing information",
-			Icon:           "📍",
-			Flag:           routesFlag,
-			StandaloneFunc: checkRoutes,
-			RequiresRouter: false,
-			DefaultEnabled: false,
-		},
-		{
-			Name:           "device",
-			Description:    "Interface/device information",
-			Icon:           "🖥️",
-			Flag:           deviceFlag,
-			StandaloneFunc: checkDevice,
-			RequiresRouter: false,
-			DefaultEnabled: false,
-		},
-		{
-			Name:           "external",
-			Description:    "External address discovery",
-			Icon:           "🌍",
-			Flag:           externalFlag,
-			StandaloneFunc: checkExternal,
-			RequiresRouter: false,
-			DefaultEnabled: false,
-		},
-		{
-			Name:           "lldp",
-			Description:    "Link layer discovery",
-			Icon:           "🔗",
-			Flag:           lldpFlag,
-			StandaloneFunc: checkLLDP,
-			RequiresRouter: false,
-			DefaultEnabled: false,
-		},
-	}
-
-	checks = append(checks, legacyChecks...)
 	return checks
 }
 

@@ -1,8 +1,17 @@
 package checkers
 
 import (
+	"github.com/R167/netcheck/checkers/api"
 	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/checkers/device"
+	"github.com/R167/netcheck/checkers/external"
+	"github.com/R167/netcheck/checkers/ipv6"
+	"github.com/R167/netcheck/checkers/lldp"
+	"github.com/R167/netcheck/checkers/mdns"
+	"github.com/R167/netcheck/checkers/natpmp"
 	"github.com/R167/netcheck/checkers/ports"
+	"github.com/R167/netcheck/checkers/routes"
+	"github.com/R167/netcheck/checkers/starlink"
 	"github.com/R167/netcheck/checkers/upnp"
 	"github.com/R167/netcheck/checkers/web"
 	"github.com/R167/netcheck/internal/checker"
@@ -17,9 +26,21 @@ type CheckInfo struct {
 
 func AllCheckers() []checker.Checker {
 	return []checker.Checker{
+		// Router-based checkers (require router access)
 		web.NewWebChecker(),
 		ports.NewPortsChecker(),
 		upnp.NewUPnPChecker(),
+		natpmp.NewNATpmpChecker(),
+		ipv6.NewIPv6Checker(),
+		mdns.NewMDNSChecker(),
+		api.NewAPIChecker(),
+		starlink.NewStarlinkChecker(),
+
+		// Standalone checkers (don't require router access)
+		routes.NewRoutesChecker(),
+		device.NewDeviceChecker(),
+		external.NewExternalChecker(),
+		lldp.NewLLDPChecker(),
 	}
 }
 

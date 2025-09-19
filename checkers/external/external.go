@@ -1,4 +1,4 @@
-package main
+package external
 
 import (
 	"encoding/json"
@@ -10,7 +10,16 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/checker"
 )
+
+type ExternalChecker struct{}
+
+type ExternalConfig struct {
+	TestProxy bool
+}
 
 // ExternalIPInfo represents external IP address information
 type ExternalIPInfo struct {
@@ -35,7 +44,75 @@ type ProxyTestResult struct {
 	Error        string
 }
 
-func checkExternal() {
+// GeoLocationResponse represents a response from a geolocation service
+type GeoLocationResponse struct {
+	Country string `json:"country"`
+	ISP     string `json:"isp"`
+	ASN     string `json:"as"`
+	Proxy   bool   `json:"proxy"`
+	VPN     bool   `json:"vpn"`
+	Tor     bool   `json:"tor"`
+	Query   string `json:"query"`
+}
+
+func NewExternalChecker() checker.Checker {
+	return &ExternalChecker{}
+}
+
+func (c *ExternalChecker) Name() string {
+	return "external"
+}
+
+func (c *ExternalChecker) Description() string {
+	return "External IP address discovery and proxy detection"
+}
+
+func (c *ExternalChecker) Icon() string {
+	return "🌍"
+}
+
+func (c *ExternalChecker) DefaultConfig() checker.CheckerConfig {
+	return ExternalConfig{
+		TestProxy: false,
+	}
+}
+
+func (c *ExternalChecker) RequiresRouter() bool {
+	return false
+}
+
+func (c *ExternalChecker) DefaultEnabled() bool {
+	return true
+}
+
+func (c *ExternalChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+	// Standalone checker - no router-based functionality
+}
+
+func (c *ExternalChecker) RunStandalone(config checker.CheckerConfig) {
+	cfg := config.(ExternalConfig)
+	checkExternal(cfg)
+}
+
+func (c *ExternalChecker) MCPToolDefinition() *checker.MCPTool {
+	return &checker.MCPTool{
+		Name:        "check_external",
+		Description: "Discover external IP addresses, geolocation info, and test proxy configuration",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"test_proxy": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Test proxy configuration and connectivity",
+					"default":     false,
+				},
+			},
+			"required": []string{},
+		},
+	}
+}
+
+func checkExternal(cfg ExternalConfig) {
 	fmt.Println("🌍 External Address Discovery")
 	fmt.Println("============================")
 
@@ -46,7 +123,7 @@ func checkExternal() {
 	displayExternalInfo(externalInfo)
 
 	// Test proxy configuration if requested
-	if *proxyFlag {
+	if cfg.TestProxy {
 		fmt.Println("\n🔍 Testing proxy configuration...")
 		testProxyConfiguration(externalInfo)
 	}
@@ -189,17 +266,6 @@ func enhanceIPInfo(info *ExternalIPInfo, ipAddress string, isIPv6 bool) {
 	}
 }
 
-// GeoLocationResponse represents a response from a geolocation service
-type GeoLocationResponse struct {
-	Country string `json:"country"`
-	ISP     string `json:"isp"`
-	ASN     string `json:"as"`
-	Proxy   bool   `json:"proxy"`
-	VPN     bool   `json:"vpn"`
-	Tor     bool   `json:"tor"`
-	Query   string `json:"query"`
-}
-
 // getGeoLocationInfo gets geolocation information for an IP address
 func getGeoLocationInfo(ipAddress string) *GeoLocationResponse {
 	// Use free geolocation services (with limitations)
@@ -295,11 +361,6 @@ func displayExternalInfo(info ExternalIPInfo) {
 
 // testProxyConfiguration tests various proxy configurations
 func testProxyConfiguration(externalInfo ExternalIPInfo) {
-	if !*proxyFlag {
-		fmt.Println("  ℹ️  Proxy testing disabled (use --proxy flag to enable)")
-		return
-	}
-
 	// Test common proxy types and configurations
 	proxyTests := []struct {
 		name     string
