@@ -1,30 +1,96 @@
-package main
+package device
 
 import (
 	"fmt"
 	"net"
 	"os/exec"
 	"strings"
+
+	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/checker"
 )
+
+type DeviceChecker struct{}
+
+type DeviceConfig struct {
+	ShowVirtual bool
+}
+
+func NewDeviceChecker() checker.Checker {
+	return &DeviceChecker{}
+}
+
+func (c *DeviceChecker) Name() string {
+	return "device"
+}
+
+func (c *DeviceChecker) Description() string {
+	return "Local device and network interface analysis"
+}
+
+func (c *DeviceChecker) Icon() string {
+	return "🖥️"
+}
+
+func (c *DeviceChecker) DefaultConfig() checker.CheckerConfig {
+	return DeviceConfig{
+		ShowVirtual: false,
+	}
+}
+
+func (c *DeviceChecker) RequiresRouter() bool {
+	return false
+}
+
+func (c *DeviceChecker) DefaultEnabled() bool {
+	return true
+}
+
+func (c *DeviceChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+	// Standalone checker - no router-based functionality
+}
+
+func (c *DeviceChecker) RunStandalone(config checker.CheckerConfig) {
+	cfg := config.(DeviceConfig)
+	checkDevice(cfg)
+}
+
+func (c *DeviceChecker) MCPToolDefinition() *checker.MCPTool {
+	return &checker.MCPTool{
+		Name:        "check_device",
+		Description: "Analyze local device network interfaces, DHCP configuration, and hardware information",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"show_virtual": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Show virtual network interfaces (VPN tunnels, Docker bridges, etc.)",
+					"default":     false,
+				},
+			},
+			"required": []string{},
+		},
+	}
+}
 
 // isVirtualInterface checks if an interface is virtual/auto-generated
 func isVirtualInterface(name string) bool {
 	// Common virtual interface prefixes across different systems
 	virtualPrefixes := []string{
-		"utun",     // macOS VPN tunnels
-		"awdl",     // macOS Apple Wireless Direct Link
-		"llw",      // macOS Low latency WLAN interface
-		"bridge",   // Bridge interfaces
-		"veth",     // Linux virtual ethernet (Docker)
-		"docker",   // Docker interfaces
-		"virbr",    // Virtual bridge (libvirt)
-		"vnet",     // Virtual network interfaces
-		"tap",      // TAP interfaces
-		"tun",      // TUN interfaces (generic)
-		"gif",      // Generic tunnel interface
-		"stf",      // 6to4 tunnel interface
-		"anpi",     // macOS internal interfaces
-		"ap",       // macOS access point interface
+		"utun",   // macOS VPN tunnels
+		"awdl",   // macOS Apple Wireless Direct Link
+		"llw",    // macOS Low latency WLAN interface
+		"bridge", // Bridge interfaces
+		"veth",   // Linux virtual ethernet (Docker)
+		"docker", // Docker interfaces
+		"virbr",  // Virtual bridge (libvirt)
+		"vnet",   // Virtual network interfaces
+		"tap",    // TAP interfaces
+		"tun",    // TUN interfaces (generic)
+		"gif",    // Generic tunnel interface
+		"stf",    // 6to4 tunnel interface
+		"anpi",   // macOS internal interfaces
+		"ap",     // macOS access point interface
 	}
 
 	// Check if the interface starts with any virtual prefix
@@ -37,12 +103,12 @@ func isVirtualInterface(name string) bool {
 	return false
 }
 
-func checkDevice() {
+func checkDevice(cfg DeviceConfig) {
 	fmt.Println("🖥️  Device/Interface Information")
 	fmt.Println("==============================")
 
 	// Get network interfaces
-	interfaces := getNetworkInterfaces()
+	interfaces := getNetworkInterfaces(cfg.ShowVirtual)
 	if len(interfaces) > 0 {
 		fmt.Printf("  📡 Network Interfaces (%d found):\n", len(interfaces))
 		for _, iface := range interfaces {
@@ -77,15 +143,15 @@ func checkDevice() {
 }
 
 // getNetworkInterfaces retrieves network interface information
-func getNetworkInterfaces() []string {
+func getNetworkInterfaces(showVirtual bool) []string {
 	var interfaces []string
 
 	// Get Go's view of network interfaces first
 	ifaces, err := net.Interfaces()
 	if err == nil {
 		for _, iface := range ifaces {
-			// Skip virtual interfaces unless --show-virtual flag is set
-			if !*showVirtualFlag && isVirtualInterface(iface.Name) {
+			// Skip virtual interfaces unless showVirtual flag is set
+			if !showVirtual && isVirtualInterface(iface.Name) {
 				continue
 			}
 			var status string
@@ -193,8 +259,8 @@ func getDHCPInformation() []string {
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
 			if strings.Contains(line, "server_identifier") ||
-			   strings.Contains(line, "lease_time") ||
-			   strings.Contains(line, "domain_name") {
+				strings.Contains(line, "lease_time") ||
+				strings.Contains(line, "domain_name") {
 				info = append(info, line)
 			}
 		}
@@ -321,8 +387,8 @@ func getHardwareInformation() []string {
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
 			if strings.Contains(line, "Model Name") ||
-			   strings.Contains(line, "Processor") ||
-			   strings.Contains(line, "Memory") {
+				strings.Contains(line, "Processor") ||
+				strings.Contains(line, "Memory") {
 				info = append(info, line)
 			}
 		}

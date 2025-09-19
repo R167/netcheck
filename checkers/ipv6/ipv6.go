@@ -1,4 +1,4 @@
-package main
+package ipv6
 
 import (
 	"fmt"
@@ -6,41 +6,141 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/checker"
 )
+
+type IPv6Checker struct{}
+
+type IPv6Config struct {
+	ShowVirtual bool
+}
 
 // IPv6AddressInfo represents detailed information about an IPv6 address
 type IPv6AddressInfo struct {
-	Address     string
-	Prefix      string
-	Interface   string
-	Type        string
-	Scope       string
-	Status      string
-	Source      string
-	Preferred   bool
-	Temporary   bool
-	Deprecated  bool
+	Address    string
+	Prefix     string
+	Interface  string
+	Type       string
+	Scope      string
+	Status     string
+	Source     string
+	Preferred  bool
+	Temporary  bool
+	Deprecated bool
 }
 
 // IPv6InterfaceInfo represents IPv6 configuration for an interface
 type IPv6InterfaceInfo struct {
-	Name              string
-	Addresses         []IPv6AddressInfo
-	LinkLocalAddress  string
-	GlobalAddresses   []string
-	ULAAddresses      []string
-	TempAddresses     []string
-	RouterAddress     string
-	MTU               int
-	HopLimit          int
-	Flags             []string
+	Name             string
+	Addresses        []IPv6AddressInfo
+	LinkLocalAddress string
+	GlobalAddresses  []string
+	ULAAddresses     []string
+	TempAddresses    []string
+	RouterAddress    string
+	MTU              int
+	HopLimit         int
+	Flags            []string
 }
 
-func checkIPv6(router *RouterInfo) {
+func NewIPv6Checker() checker.Checker {
+	return &IPv6Checker{}
+}
+
+func (c *IPv6Checker) Name() string {
+	return "ipv6"
+}
+
+func (c *IPv6Checker) Description() string {
+	return "IPv6 configuration analysis and security assessment"
+}
+
+func (c *IPv6Checker) Icon() string {
+	return "🌐"
+}
+
+func (c *IPv6Checker) DefaultConfig() checker.CheckerConfig {
+	return IPv6Config{
+		ShowVirtual: false,
+	}
+}
+
+func (c *IPv6Checker) RequiresRouter() bool {
+	return true
+}
+
+func (c *IPv6Checker) DefaultEnabled() bool {
+	return true
+}
+
+func (c *IPv6Checker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+	cfg := config.(IPv6Config)
+	checkIPv6(router, cfg)
+}
+
+func (c *IPv6Checker) RunStandalone(config checker.CheckerConfig) {
+	// Router-based checker - no standalone functionality
+}
+
+func (c *IPv6Checker) MCPToolDefinition() *checker.MCPTool {
+	return &checker.MCPTool{
+		Name:        "check_ipv6",
+		Description: "Analyze IPv6 configuration, addresses, and security implications",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"gateway_ip": map[string]interface{}{
+					"type":        "string",
+					"description": "The IP address of the router gateway",
+				},
+				"show_virtual": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Show virtual network interfaces",
+					"default":     false,
+				},
+			},
+			"required": []string{"gateway_ip"},
+		},
+	}
+}
+
+// isVirtualInterface checks if an interface is virtual/auto-generated
+func isVirtualInterface(name string) bool {
+	// Common virtual interface prefixes across different systems
+	virtualPrefixes := []string{
+		"utun",   // macOS VPN tunnels
+		"awdl",   // macOS Apple Wireless Direct Link
+		"llw",    // macOS Low latency WLAN interface
+		"bridge", // Bridge interfaces
+		"veth",   // Linux virtual ethernet (Docker)
+		"docker", // Docker interfaces
+		"virbr",  // Virtual bridge (libvirt)
+		"vnet",   // Virtual network interfaces
+		"tap",    // TAP interfaces
+		"tun",    // TUN interfaces (generic)
+		"gif",    // Generic tunnel interface
+		"stf",    // 6to4 tunnel interface
+		"anpi",   // macOS internal interfaces
+		"ap",     // macOS access point interface
+	}
+
+	// Check if the interface starts with any virtual prefix
+	for _, prefix := range virtualPrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func checkIPv6(router *common.RouterInfo, cfg IPv6Config) {
 	fmt.Println("\n🔍 Checking IPv6 configuration...")
 
 	// Get comprehensive IPv6 information
-	ipv6Info := getIPv6Information()
+	ipv6Info := getIPv6Information(cfg.ShowVirtual)
 
 	if len(ipv6Info) == 0 {
 		fmt.Println("  ℹ️  No IPv6 configuration detected")
@@ -60,7 +160,7 @@ func checkIPv6(router *RouterInfo) {
 }
 
 // getIPv6Information gathers comprehensive IPv6 configuration data
-func getIPv6Information() []IPv6InterfaceInfo {
+func getIPv6Information(showVirtual bool) []IPv6InterfaceInfo {
 	var interfaces []IPv6InterfaceInfo
 
 	// Get Go's view of interfaces
@@ -70,8 +170,8 @@ func getIPv6Information() []IPv6InterfaceInfo {
 	}
 
 	for _, iface := range ifaces {
-		// Skip virtual interfaces unless --show-virtual flag is set
-		if !*showVirtualFlag && isVirtualInterface(iface.Name) {
+		// Skip virtual interfaces unless showVirtual flag is set
+		if !showVirtual && isVirtualInterface(iface.Name) {
 			continue
 		}
 
@@ -265,7 +365,7 @@ func enhanceIPv6Info(info *IPv6InterfaceInfo) {
 func getIPv6HopLimit(ifaceName string) int {
 	// Try different system commands to get hop limit
 	commands := [][]string{
-		{"sysctl", "-n", fmt.Sprintf("net.inet6.ip6.hlim")}, // macOS
+		{"sysctl", "-n", fmt.Sprintf("net.inet6.ip6.hlim")},                     // macOS
 		{"cat", fmt.Sprintf("/proc/sys/net/ipv6/conf/%s/hop_limit", ifaceName)}, // Linux
 	}
 
@@ -287,7 +387,7 @@ func getIPv6Router(ifaceName string) string {
 	// Try different methods to find router
 	commands := [][]string{
 		{"route", "-n", "get", "-inet6", "default"}, // macOS
-		{"ip", "-6", "route", "show", "default"},     // Linux
+		{"ip", "-6", "route", "show", "default"},    // Linux
 	}
 
 	for _, cmd := range commands {
@@ -309,7 +409,7 @@ func getIPv6Router(ifaceName string) string {
 }
 
 // analyzeIPv6Configuration displays comprehensive IPv6 analysis
-func analyzeIPv6Configuration(interfaces []IPv6InterfaceInfo, router *RouterInfo) {
+func analyzeIPv6Configuration(interfaces []IPv6InterfaceInfo, router *common.RouterInfo) {
 	totalAddresses := 0
 	globalInterfaces := 0
 	linkLocalInterfaces := 0
@@ -368,7 +468,7 @@ func analyzeIPv6Configuration(interfaces []IPv6InterfaceInfo, router *RouterInfo
 }
 
 // assessIPv6Security performs security assessment of IPv6 configuration
-func assessIPv6Security(interfaces []IPv6InterfaceInfo, router *RouterInfo) {
+func assessIPv6Security(interfaces []IPv6InterfaceInfo, router *common.RouterInfo) {
 	hasGlobal := false
 	hasTemporary := false
 	hasULA := false
@@ -387,24 +487,24 @@ func assessIPv6Security(interfaces []IPv6InterfaceInfo, router *RouterInfo) {
 
 	// Security assessments
 	if hasGlobal {
-		router.Issues = append(router.Issues, SecurityIssue{
-			Severity:    "MEDIUM",
+		router.Issues = append(router.Issues, common.SecurityIssue{
+			Severity:    common.SeverityMedium,
 			Description: "IPv6 global addresses detected",
 			Details:     "IPv6 global addresses are reachable from the internet. Ensure IPv6 firewall rules are properly configured to prevent unauthorized access.",
 		})
 	}
 
 	if hasTemporary {
-		router.Issues = append(router.Issues, SecurityIssue{
-			Severity:    "LOW",
+		router.Issues = append(router.Issues, common.SecurityIssue{
+			Severity:    common.SeverityLow,
 			Description: "IPv6 Privacy Extensions enabled",
 			Details:     "Temporary IPv6 addresses provide privacy benefits by changing periodically, making device tracking more difficult.",
 		})
 	}
 
 	if hasULA {
-		router.Issues = append(router.Issues, SecurityIssue{
-			Severity:    "LOW",
+		router.Issues = append(router.Issues, common.SecurityIssue{
+			Severity:    common.SeverityLow,
 			Description: "IPv6 Unique Local Addresses (ULA) in use",
 			Details:     "ULA addresses provide local connectivity but should not be routed globally. Verify network configuration.",
 		})
@@ -412,8 +512,8 @@ func assessIPv6Security(interfaces []IPv6InterfaceInfo, router *RouterInfo) {
 
 	// Check for missing privacy extensions on global addresses
 	if hasGlobal && !hasTemporary {
-		router.Issues = append(router.Issues, SecurityIssue{
-			Severity:    "MEDIUM",
+		router.Issues = append(router.Issues, common.SecurityIssue{
+			Severity:    common.SeverityMedium,
 			Description: "IPv6 Privacy Extensions not enabled",
 			Details:     "Consider enabling IPv6 Privacy Extensions to generate temporary addresses that change periodically, improving privacy.",
 		})
@@ -421,13 +521,13 @@ func assessIPv6Security(interfaces []IPv6InterfaceInfo, router *RouterInfo) {
 }
 
 // testIPv6Gateway tests connectivity to IPv6 gateways
-func testIPv6Gateway(router *RouterInfo) {
+func testIPv6Gateway(router *common.RouterInfo) {
 	fmt.Printf("\n  🔍 Testing IPv6 gateway connectivity...\n")
 
 	// Common IPv6 gateway patterns to test
 	gatewayPatterns := []string{
-		"fe80::1",           // Common link-local gateway
-		"::1",               // Loopback
+		"fe80::1",              // Common link-local gateway
+		"::1",                  // Loopback
 		"2001:4860:4860::8888", // Google DNS
 		"2606:4700:4700::1111", // Cloudflare DNS
 	}
@@ -448,8 +548,8 @@ func testIPv6Gateway(router *RouterInfo) {
 	if reachableGateways > 0 {
 		fmt.Printf("  🌐 IPv6 internet connectivity appears functional\n")
 
-		router.Issues = append(router.Issues, SecurityIssue{
-			Severity:    "MEDIUM",
+		router.Issues = append(router.Issues, common.SecurityIssue{
+			Severity:    common.SeverityMedium,
 			Description: "IPv6 internet connectivity active",
 			Details:     "Device has active IPv6 internet connectivity. Ensure IPv6 firewall rules match IPv4 security policies.",
 		})

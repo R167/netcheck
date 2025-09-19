@@ -145,5 +145,51 @@ Create a comprehensive network gateway security assessment tool that can:
 - Error handling patterns are essential for robust tools
 
 This project demonstrates effective use of Go for network security tools and showcases modern router service discovery techniques.
-- When buildling new checks, always put them in their own files, not main.go
-- always commit and push before changing branches
+
+## MCP Integration Architecture
+
+### Checker Package Structure (Issue #23)
+- **Modular Checkers**: Each security check is now a separate package under `checkers/`
+  - Example: `checkers/web/`, `checkers/ports/`, `checkers/upnp/`
+  - Each checker implements the `internal/checker.Checker` interface
+  - Shared types live in `checkers/common/`
+
+- **Checker Interface**: Defined in `internal/checker/checker.go`
+  ```go
+  type Checker interface {
+      Name() string
+      Description() string
+      Icon() string
+      DefaultConfig() CheckerConfig
+      RequiresRouter() bool
+      DefaultEnabled() bool
+      Run(config CheckerConfig, router *common.RouterInfo)
+      RunStandalone(config CheckerConfig)
+      MCPToolDefinition() *MCPTool
+  }
+  ```
+
+- **Dynamic Registry**: The `checkers/registry.go` provides:
+  - `AllCheckers()` - Returns all available checker implementations
+  - `GetChecker(name)` - Lookup checker by name
+  - `RunChecker(name, config, router)` - Execute a specific checker
+  - Main.go builds its check registry dynamically from `checkers.AllCheckers()`
+
+- **Dual Mode Operation**:
+  - **CLI Mode** (default): Traditional command-line interface
+  - **MCP Mode** (`--mcp` flag): Model Context Protocol server over stdio
+  - Completely separate code paths dispatched from `main()`
+
+- **Type Conversion**: Adapters in `mcp_adapters.go` convert between:
+  - Legacy `main.RouterInfo` (for CLI compatibility)
+  - New `common.RouterInfo` (for checker packages)
+  - MCP input/output types
+
+### Development Guidelines
+- When building new checks, always put them in their own package under `checkers/`
+- Each checker package should have a `doc.go` file
+- Never put checker implementations in `main.go` - main.go only orchestrates
+- The checker registry is built dynamically - add new checkers to `AllCheckers()` in `checkers/registry.go`
+- Always commit and push before changing branches
+- Never use the timeout command - it blocks command approval. Use Bash tool with background execution instead
+- Do not use `&` to background a bash prompt - use the dedicated tool parameter

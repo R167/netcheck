@@ -10,20 +10,20 @@ type DefaultCred struct {
 
 // Vendor patterns compiled at package level for efficiency
 var (
-	linksysPattern  = regexp.MustCompile(`(?i)linksys|smart\s*wi-fi`)
-	netgearPattern  = regexp.MustCompile(`(?i)netgear|genie`)
-	dlinkPattern    = regexp.MustCompile(`(?i)d-link|dir-\d+`)
-	tplinkPattern   = regexp.MustCompile(`(?i)tp-link|tl-\w+`)
-	asusPattern     = regexp.MustCompile(`(?i)asus|rt-\w+`)
-	ciscoPattern    = regexp.MustCompile(`(?i)cisco|linksys`)
-	belkinPattern   = regexp.MustCompile(`(?i)belkin|play max`)
-	motorolaPattern = regexp.MustCompile(`(?i)motorola|surfboard`)
-	xfinityPattern  = regexp.MustCompile(`(?i)xfinity|comcast|technicolor`)
-	arrisPattern    = regexp.MustCompile(`(?i)arris|surfboard`)
-	huaweiPattern   = regexp.MustCompile(`(?i)huawei|echolife`)
-	ztePattern      = regexp.MustCompile(`(?i)zte`)
+	linksysPattern   = regexp.MustCompile(`(?i)linksys|smart\s*wi-fi`)
+	netgearPattern   = regexp.MustCompile(`(?i)netgear|genie`)
+	dlinkPattern     = regexp.MustCompile(`(?i)d-link|dir-\d+`)
+	tplinkPattern    = regexp.MustCompile(`(?i)tp-link|tl-\w+`)
+	asusPattern      = regexp.MustCompile(`(?i)asus|rt-\w+`)
+	ciscoPattern     = regexp.MustCompile(`(?i)cisco|linksys`)
+	belkinPattern    = regexp.MustCompile(`(?i)belkin|play max`)
+	motorolaPattern  = regexp.MustCompile(`(?i)motorola|surfboard`)
+	xfinityPattern   = regexp.MustCompile(`(?i)xfinity|comcast|technicolor`)
+	arrisPattern     = regexp.MustCompile(`(?i)arris|surfboard`)
+	huaweiPattern    = regexp.MustCompile(`(?i)huawei|echolife`)
+	ztePattern       = regexp.MustCompile(`(?i)zte`)
 	actiontecPattern = regexp.MustCompile(`(?i)actiontec|verizon`)
-	titlePattern    = regexp.MustCompile(`<title[^>]*>([^<]+)</title>`)
+	titlePattern     = regexp.MustCompile(`<title[^>]*>([^<]+)</title>`)
 )
 
 // vendorPatterns maps vendor names to their compiled regex patterns

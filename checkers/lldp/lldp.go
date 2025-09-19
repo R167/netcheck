@@ -1,11 +1,18 @@
-package main
+package lldp
 
 import (
 	"fmt"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/checker"
 )
+
+type LLDPChecker struct{}
+
+type LLDPConfig struct{}
 
 // LLDP constants
 const (
@@ -17,13 +24,61 @@ const (
 
 // LLDPNeighbor represents an LLDP neighbor device
 type LLDPNeighbor struct {
-	ChassisID     string
-	PortID        string
-	SystemName    string
-	SystemDesc    string
-	Capabilities  []string
-	ManagementIP  string
-	Interface     string
+	ChassisID    string
+	PortID       string
+	SystemName   string
+	SystemDesc   string
+	Capabilities []string
+	ManagementIP string
+	Interface    string
+}
+
+func NewLLDPChecker() checker.Checker {
+	return &LLDPChecker{}
+}
+
+func (c *LLDPChecker) Name() string {
+	return "lldp"
+}
+
+func (c *LLDPChecker) Description() string {
+	return "Link Layer Discovery Protocol neighbor discovery"
+}
+
+func (c *LLDPChecker) Icon() string {
+	return "🔗"
+}
+
+func (c *LLDPChecker) DefaultConfig() checker.CheckerConfig {
+	return LLDPConfig{}
+}
+
+func (c *LLDPChecker) RequiresRouter() bool {
+	return false
+}
+
+func (c *LLDPChecker) DefaultEnabled() bool {
+	return true
+}
+
+func (c *LLDPChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+	// Standalone checker - no router-based functionality
+}
+
+func (c *LLDPChecker) RunStandalone(config checker.CheckerConfig) {
+	checkLLDP()
+}
+
+func (c *LLDPChecker) MCPToolDefinition() *checker.MCPTool {
+	return &checker.MCPTool{
+		Name:        "check_lldp",
+		Description: "Discover LLDP neighbors and analyze network topology information disclosure",
+		InputSchema: map[string]interface{}{
+			"type":       "object",
+			"properties": map[string]interface{}{},
+			"required":   []string{},
+		},
+	}
 }
 
 func checkLLDP() {
