@@ -12,6 +12,15 @@ import (
 	"time"
 )
 
+func isPortOpen(ip string, port int) bool {
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, strconv.Itoa(port)), PortTimeout)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
 func checkUPnP(router *RouterInfo) {
 	fmt.Println("\n🔍 Checking UPnP services...")
 
