@@ -63,7 +63,6 @@ func getDescription(name string) string {
 	descriptions := map[string]string{
 		"check_web_interface": "Check router web interface for default credentials and security issues",
 		"scan_ports":          "Scan common management ports on a router",
-		"check_all":           "Run all available security checks on the router",
 		"check_upnp":          "Check for UPnP services and enumerate port mappings",
 		"check_natpmp":        "Check for NAT-PMP services",
 		"check_ipv6":          "Check IPv6 configuration and connectivity",
