@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/R167/netcheck/internal/checkers"
+	"github.com/R167/netcheck/internal/mcp"
 	"github.com/R167/netcheck/starlink"
 )
 
@@ -118,19 +120,38 @@ var (
 	lldpFlag       = flag.Bool("lldp", false, "Link layer discovery and debugging")
 
 	// Global configuration flags
-	timeoutFlag    = flag.Duration("timeout", 60*time.Second, "Maximum time to run all tests (e.g. 30s, 2m, 1h)")
-	showVirtualFlag  = flag.Bool("show-virtual", false, "Show virtual network interfaces (VPN tunnels, Docker bridges, etc.)")
+	mcpFlag         = flag.Bool("mcp", false, "Run in MCP server mode (stdout)")
+	timeoutFlag     = flag.Duration("timeout", 60*time.Second, "Maximum time to run all tests (e.g. 30s, 2m, 1h)")
+	showVirtualFlag = flag.Bool("show-virtual", false, "Show virtual network interfaces (VPN tunnels, Docker bridges, etc.)")
 	portTimeoutFlag = flag.Duration("port-timeout", PortTimeout, "Timeout for individual port scans (e.g. 500ms, 1s, 2s)")
 )
 
 func main() {
 	flag.Parse()
 
-	// Set up global timeout context
+	if *mcpFlag {
+		runMCPMode()
+		return
+	}
+
+	runCLIMode()
+}
+
+func runMCPMode() {
+	registry := mcp.NewCheckerRegistry()
+
+	registry.Register("check_web_interface", checkers.CheckWebInterface)
+
+	if err := mcp.RunServer(registry); err != nil {
+		fmt.Fprintf(os.Stderr, "MCP server error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runCLIMode() {
 	ctx, cancel := context.WithTimeout(context.Background(), *timeoutFlag)
 	defer cancel()
 
-	// Monitor for timeout
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -139,7 +160,6 @@ func main() {
 
 	select {
 	case <-done:
-		// Normal completion
 	case <-ctx.Done():
 		fmt.Printf("\n⏰ Timeout reached (%v) - stopping checks\n", *timeoutFlag)
 		os.Exit(1)
