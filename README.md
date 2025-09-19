@@ -11,6 +11,7 @@ A comprehensive network gateway security assessment tool for identifying vulnera
 - **Device Fingerprinting**: Identifies router vendor, model, and serial numbers
 - **IPv6 Assessment**: Checks IPv6 configuration and potential firewall bypasses
 - **Comprehensive Reporting**: Prioritized security issues with actionable recommendations
+- **MCP Support**: Model Context Protocol server mode for AI agent integration
 
 ## Detectors
 
@@ -35,6 +36,7 @@ A comprehensive network gateway security assessment tool for identifying vulnera
 |------|-------------|
 | `--all` | Run all available detectors |
 | `--default` | Run only the default detector suite |
+| `--mcp` | Run in MCP (Model Context Protocol) server mode |
 | `--show-virtual` | Include virtual network interfaces (VPN tunnels, Docker bridges, etc.) |
 | `--proxy` | Test proxy configuration (requires `--external`) |
 
@@ -69,6 +71,21 @@ go build -o netcheck
 ./netcheck --external --proxy  # External IP with proxy testing
 ./netcheck --all               # All available tests
 ```
+
+### MCP Server Mode
+
+Run netcheck as an MCP server for integration with AI agents and tools:
+
+```bash
+./netcheck --mcp
+```
+
+Available MCP tools:
+- `check_web_interface` - Test router web interface and default credentials
+- `scan_ports` - Scan common management ports
+- `check_all` - Run comprehensive security assessment
+
+Each tool accepts a `gateway_ip` parameter and returns structured security findings.
 
 ## Example Output
 

@@ -141,6 +141,8 @@ func runMCPMode() {
 	registry := mcp.NewCheckerRegistry()
 
 	registry.Register("check_web_interface", checkers.CheckWebInterface)
+	registry.Register("scan_ports", checkers.ScanPorts)
+	registry.Register("check_all", checkers.CheckAll)
 
 	if err := mcp.RunServer(registry); err != nil {
 		fmt.Fprintf(os.Stderr, "MCP server error: %v\n", err)
