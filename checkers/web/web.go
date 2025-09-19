@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/R167/netcheck/checkers"
+	"github.com/R167/netcheck/internal/checker"
 	"github.com/R167/netcheck/checkers/common"
 )
 
@@ -136,7 +136,7 @@ var defaultPageIndicators = []string{
 	"setup wizard",
 }
 
-func NewWebChecker() checkers.Checker {
+func NewWebChecker() checker.Checker {
 	return &WebChecker{}
 }
 
@@ -152,7 +152,7 @@ func (c *WebChecker) Icon() string {
 	return "🔍"
 }
 
-func (c *WebChecker) DefaultConfig() checkers.CheckerConfig {
+func (c *WebChecker) DefaultConfig() checker.CheckerConfig {
 	return WebConfig{
 		CheckDefaultCreds: true,
 	}
@@ -166,16 +166,16 @@ func (c *WebChecker) DefaultEnabled() bool {
 	return true
 }
 
-func (c *WebChecker) Run(config checkers.CheckerConfig, router *common.RouterInfo) {
+func (c *WebChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	cfg := config.(WebConfig)
 	checkWebInterface(router, cfg)
 }
 
-func (c *WebChecker) RunStandalone(config checkers.CheckerConfig) {
+func (c *WebChecker) RunStandalone(config checker.CheckerConfig) {
 }
 
-func (c *WebChecker) MCPToolDefinition() *checkers.MCPTool {
-	return &checkers.MCPTool{
+func (c *WebChecker) MCPToolDefinition() *checker.MCPTool {
+	return &checker.MCPTool{
 		Name:        "check_web_interface",
 		Description: "Check router web interface for default credentials and security issues",
 		InputSchema: map[string]interface{}{

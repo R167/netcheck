@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/R167/netcheck/checkers"
+	"github.com/R167/netcheck/internal/checker"
 	"github.com/R167/netcheck/checkers/common"
 )
 
@@ -35,7 +35,7 @@ var managementPorts = map[int]common.SecurityIssue{
 	},
 }
 
-func NewPortsChecker() checkers.Checker {
+func NewPortsChecker() checker.Checker {
 	return &PortsChecker{}
 }
 
@@ -51,7 +51,7 @@ func (c *PortsChecker) Icon() string {
 	return "🔍"
 }
 
-func (c *PortsChecker) DefaultConfig() checkers.CheckerConfig {
+func (c *PortsChecker) DefaultConfig() checker.CheckerConfig {
 	return PortsConfig{
 		Ports:       []int{22, 23, 80, 443, 8080, 8443, 21, 53, 161, 8291},
 		PortTimeout: common.PortTimeout,
@@ -66,16 +66,16 @@ func (c *PortsChecker) DefaultEnabled() bool {
 	return true
 }
 
-func (c *PortsChecker) Run(config checkers.CheckerConfig, router *common.RouterInfo) {
+func (c *PortsChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	cfg := config.(PortsConfig)
 	scanCommonPorts(router, cfg)
 }
 
-func (c *PortsChecker) RunStandalone(config checkers.CheckerConfig) {
+func (c *PortsChecker) RunStandalone(config checker.CheckerConfig) {
 }
 
-func (c *PortsChecker) MCPToolDefinition() *checkers.MCPTool {
-	return &checkers.MCPTool{
+func (c *PortsChecker) MCPToolDefinition() *checker.MCPTool {
+	return &checker.MCPTool{
 		Name:        "scan_ports",
 		Description: "Scan common management ports on a router",
 		InputSchema: map[string]interface{}{

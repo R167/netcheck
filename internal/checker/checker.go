@@ -1,4 +1,4 @@
-package checkers
+package checker
 
 import (
 	"github.com/R167/netcheck/checkers/common"

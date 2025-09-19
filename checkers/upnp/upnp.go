@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R167/netcheck/checkers"
+	"github.com/R167/netcheck/internal/checker"
 	"github.com/R167/netcheck/checkers/common"
 )
 
@@ -21,7 +21,7 @@ type UPnPConfig struct {
 	EnumerateMappings bool
 }
 
-func NewUPnPChecker() checkers.Checker {
+func NewUPnPChecker() checker.Checker {
 	return &UPnPChecker{}
 }
 
@@ -37,7 +37,7 @@ func (c *UPnPChecker) Icon() string {
 	return "🔍"
 }
 
-func (c *UPnPChecker) DefaultConfig() checkers.CheckerConfig {
+func (c *UPnPChecker) DefaultConfig() checker.CheckerConfig {
 	return UPnPConfig{
 		EnumerateMappings: true,
 	}
@@ -51,16 +51,16 @@ func (c *UPnPChecker) DefaultEnabled() bool {
 	return true
 }
 
-func (c *UPnPChecker) Run(config checkers.CheckerConfig, router *common.RouterInfo) {
+func (c *UPnPChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	cfg := config.(UPnPConfig)
 	checkUPnP(router, cfg)
 }
 
-func (c *UPnPChecker) RunStandalone(config checkers.CheckerConfig) {
+func (c *UPnPChecker) RunStandalone(config checker.CheckerConfig) {
 }
 
-func (c *UPnPChecker) MCPToolDefinition() *checkers.MCPTool {
-	return &checkers.MCPTool{
+func (c *UPnPChecker) MCPToolDefinition() *checker.MCPTool {
+	return &checker.MCPTool{
 		Name:        "check_upnp",
 		Description: "Check for UPnP services and enumerate port mappings",
 		InputSchema: map[string]interface{}{

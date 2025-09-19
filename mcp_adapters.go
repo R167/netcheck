@@ -4,16 +4,18 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/R167/netcheck/checkers"
+	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/mcp"
 )
 
 func adaptWebCheck(input *mcp.CheckToolInput) (*mcp.CheckToolOutput, error) {
-	router := &RouterInfo{
+	router := &common.RouterInfo{
 		IP:     input.GatewayIP,
-		Issues: []SecurityIssue{},
+		Issues: []common.SecurityIssue{},
 	}
 
-	checkWebInterface(router)
+	checkers.RunChecker("web", nil, router)
 
 	issues := make([]mcp.Issue, len(router.Issues))
 	for i, iss := range router.Issues {
@@ -34,13 +36,13 @@ func adaptWebCheck(input *mcp.CheckToolInput) (*mcp.CheckToolOutput, error) {
 }
 
 func adaptPortScan(input *mcp.CheckToolInput) (*mcp.CheckToolOutput, error) {
-	router := &RouterInfo{
+	router := &common.RouterInfo{
 		IP:        input.GatewayIP,
-		Issues:    []SecurityIssue{},
+		Issues:    []common.SecurityIssue{},
 		OpenPorts: []int{},
 	}
 
-	scanCommonPorts(router)
+	checkers.RunChecker("ports", nil, router)
 
 	issues := make([]mcp.Issue, len(router.Issues))
 	for i, iss := range router.Issues {
@@ -60,7 +62,7 @@ func adaptPortScan(input *mcp.CheckToolInput) (*mcp.CheckToolOutput, error) {
 	}, nil
 }
 
-func formatMCPReport(router *RouterInfo) string {
+func formatMCPReport(router *common.RouterInfo) string {
 	report := fmt.Sprintf("Router IP: %s\n", router.IP)
 	if router.Vendor != "" {
 		report += fmt.Sprintf("Vendor: %s\n", strings.Title(router.Vendor))
