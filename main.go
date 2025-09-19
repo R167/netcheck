@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/R167/netcheck/internal/checkers"
 	"github.com/R167/netcheck/internal/mcp"
 	"github.com/R167/netcheck/starlink"
 )
@@ -140,7 +139,8 @@ func main() {
 func runMCPMode() {
 	registry := mcp.NewCheckerRegistry()
 
-	registry.Register("check_web_interface", checkers.CheckWebInterface)
+	registry.Register("check_web_interface", adaptWebCheck)
+	registry.Register("scan_ports", adaptPortScan)
 
 	if err := mcp.RunServer(registry); err != nil {
 		fmt.Fprintf(os.Stderr, "MCP server error: %v\n", err)
