@@ -17,7 +17,7 @@ func TestDetectVendor(t *testing.T) {
 	}{
 		{
 			name:    "Linksys router",
-			content: `<html><title>Linksys Smart Wi-Fi</title></html>`,
+			content: `<html><title>Smart Wi-Fi Router</title></html>`,
 			want:    "linksys",
 		},
 		{
