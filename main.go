@@ -107,6 +107,7 @@ var (
 	natpmpFlag   = flag.Bool("natpmp", false, "Test NAT-PMP services")
 	ipv6Flag     = flag.Bool("ipv6", false, "Check IPv6 configuration")
 	mdnsFlag     = flag.Bool("mdns", false, "Perform comprehensive mDNS service discovery")
+	ssdpFlag     = flag.Bool("ssdp", false, "Discover SSDP services (DLNA, IoT devices)")
 	apiFlag      = flag.Bool("api", false, "Check for exposed router APIs")
 	starlinkFlag = flag.Bool("starlink", false, "Check for Starlink Dishy")
 	routesFlag   = flag.Bool("routes", false, "Display routing information")
@@ -501,6 +502,7 @@ func buildChecksRegistry() []Check {
 		"natpmp":   natpmpFlag,
 		"ipv6":     ipv6Flag,
 		"mdns":     mdnsFlag,
+		"ssdp":     ssdpFlag,
 		"api":      apiFlag,
 		"starlink": starlinkFlag,
 		"routes":   routesFlag,
