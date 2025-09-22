@@ -39,7 +39,7 @@ func TestParseSSDPResponse(t *testing.T) {
 			},
 		},
 		{
-			name: "location with extra spaces",
+			name:     "location with extra spaces",
 			response: "LOCATION:   http://example.com/test.xml   \r\n\r\n",
 			want: &common.SSDPResponse{
 				Location: "http://example.com/test.xml",
