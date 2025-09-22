@@ -257,7 +257,7 @@ func TestCheckWebInterface_Integration(t *testing.T) {
 
 	t.Run("Linksys router with default setup page", func(t *testing.T) {
 		html := `<html>
-		<head><title>Linksys Smart Wi-Fi</title></head>
+		<head><title>Smart Wi-Fi Router Setup</title></head>
 		<body>
 			<h1>Welcome to your new router</h1>
 			<p>Please complete the quick setup wizard to configure your router.</p>
