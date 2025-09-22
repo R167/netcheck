@@ -1,4 +1,4 @@
-package main
+package upnp
 
 import (
 	"encoding/xml"
@@ -10,12 +10,80 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/checker"
 )
 
-func checkUPnP(router *RouterInfo) {
+type UPnPChecker struct{}
+
+type UPnPConfig struct {
+	EnumerateMappings bool
+}
+
+func NewUPnPChecker() checker.Checker {
+	return &UPnPChecker{}
+}
+
+func (c *UPnPChecker) Name() string {
+	return "upnp"
+}
+
+func (c *UPnPChecker) Description() string {
+	return "UPnP services and port mappings"
+}
+
+func (c *UPnPChecker) Icon() string {
+	return "🔍"
+}
+
+func (c *UPnPChecker) DefaultConfig() checker.CheckerConfig {
+	return UPnPConfig{
+		EnumerateMappings: true,
+	}
+}
+
+func (c *UPnPChecker) RequiresRouter() bool {
+	return true
+}
+
+func (c *UPnPChecker) DefaultEnabled() bool {
+	return true
+}
+
+func (c *UPnPChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+	cfg := config.(UPnPConfig)
+	checkUPnP(router, cfg)
+}
+
+func (c *UPnPChecker) RunStandalone(config checker.CheckerConfig) {
+}
+
+func (c *UPnPChecker) MCPToolDefinition() *checker.MCPTool {
+	return &checker.MCPTool{
+		Name:        "check_upnp",
+		Description: "Check for UPnP services and enumerate port mappings",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"gateway_ip": map[string]interface{}{
+					"type":        "string",
+					"description": "The IP address of the router gateway",
+				},
+				"enumerate_mappings": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Whether to enumerate active port mappings",
+					"default":     true,
+				},
+			},
+			"required": []string{"gateway_ip"},
+		},
+	}
+}
+
+func checkUPnP(router *common.RouterInfo, cfg UPnPConfig) {
 	fmt.Println("\n🔍 Checking UPnP services...")
 
-	// Check for UPnP SSDP discovery
 	upnpInfo := checkSSDPMulticast()
 	if upnpInfo != nil {
 		router.UPnPEnabled = true
@@ -23,7 +91,6 @@ func checkUPnP(router *RouterInfo) {
 		fmt.Printf("  🔗 Location: %s\n", upnpInfo.Location)
 		fmt.Printf("  🖥️  Server: %s\n", upnpInfo.Server)
 
-		// Try to get device description from discovered location
 		if desc := getUPnPDescriptionFromURL(upnpInfo.Location); desc != nil {
 			fmt.Printf("  📄 Device: %s (%s)\n", desc.FriendlyName, desc.Manufacturer)
 			if desc.ModelName != "" {
@@ -37,29 +104,32 @@ func checkUPnP(router *RouterInfo) {
 				fmt.Printf("  🌐 Admin URL: %s\n", desc.PresentationURL)
 			}
 
-			// Check for exposed port mappings
-			checkUPnPPortMappings(router, upnpInfo.Location)
+			if cfg.EnumerateMappings {
+				checkUPnPPortMappings(router, upnpInfo.Location)
+			}
 		}
 
-		router.Issues = append(router.Issues, SecurityIssue{
+		router.Issues = append(router.Issues, common.SecurityIssue{
 			Severity:    "MEDIUM",
 			Description: "UPnP service is enabled",
 			Details:     "UPnP can expose internal services and allow port forwarding. Ensure it's properly configured.",
 		})
 	} else {
-		// Fallback: Check for UPnP IGD on common ports
 		upnpPorts := []int{1900, 5000, 49152, 49153, 49154}
 		for _, port := range upnpPorts {
-			if isPortOpen(router.IP, port) {
-				router.UPnPEnabled = true
-				fmt.Printf("  ✅ UPnP service on port %d\n", port)
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort(router.IP, strconv.Itoa(port)), common.PortTimeout)
+			if err != nil {
+				continue
+			}
+			conn.Close()
 
-				// Try to get device description
-				if desc := getUPnPDescription(router.IP, port); desc != nil {
-					fmt.Printf("  📄 Device: %s (%s)\n", desc.FriendlyName, desc.Manufacturer)
-					if desc.ModelName != "" {
-						router.Model = desc.ModelName
-					}
+			router.UPnPEnabled = true
+			fmt.Printf("  ✅ UPnP service on port %d\n", port)
+
+			if desc := getUPnPDescription(router.IP, port); desc != nil {
+				fmt.Printf("  📄 Device: %s (%s)\n", desc.FriendlyName, desc.Manufacturer)
+				if desc.ModelName != "" {
+					router.Model = desc.ModelName
 				}
 			}
 		}
@@ -70,8 +140,7 @@ func checkUPnP(router *RouterInfo) {
 	}
 }
 
-func checkSSDPMulticast() *SSDPResponse {
-	// Create a UDP socket to send SSDP multicast
+func checkSSDPMulticast() *common.SSDPResponse {
 	localAddr, err := net.ResolveUDPAddr("udp4", ":0")
 	if err != nil {
 		return nil
@@ -83,7 +152,6 @@ func checkSSDPMulticast() *SSDPResponse {
 	}
 	defer conn.Close()
 
-	// Send SSDP M-SEARCH
 	multicastAddr, err := net.ResolveUDPAddr("udp4", "239.255.255.250:1900")
 	if err != nil {
 		return nil
@@ -100,11 +168,9 @@ func checkSSDPMulticast() *SSDPResponse {
 		return nil
 	}
 
-	// Set timeout and read responses
 	conn.SetDeadline(time.Now().Add(5 * time.Second))
 	buffer := make([]byte, 2048)
 
-	// Try to read multiple responses in case there are multiple devices
 	for i := 0; i < 3; i++ {
 		n, _, err := conn.ReadFrom(buffer)
 		if err != nil {
@@ -120,9 +186,9 @@ func checkSSDPMulticast() *SSDPResponse {
 	return nil
 }
 
-func parseSSDPResponse(response string) *SSDPResponse {
+func parseSSDPResponse(response string) *common.SSDPResponse {
 	lines := strings.Split(response, "\r\n")
-	ssdp := &SSDPResponse{}
+	ssdp := &common.SSDPResponse{}
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -141,10 +207,9 @@ func parseSSDPResponse(response string) *SSDPResponse {
 	return nil
 }
 
-func getUPnPDescription(ip string, port int) *UPnPDevice {
+func getUPnPDescription(ip string, port int) *common.UPnPDevice {
 	client := &http.Client{Timeout: 3 * time.Second}
 
-	// Common UPnP description paths
 	paths := []string{
 		"/rootDesc.xml",
 		"/description.xml",
@@ -161,7 +226,7 @@ func getUPnPDescription(ip string, port int) *UPnPDevice {
 		defer resp.Body.Close()
 
 		if resp.StatusCode == 200 {
-			var device UPnPDevice
+			var device common.UPnPDevice
 			if err := xml.NewDecoder(resp.Body).Decode(&device); err == nil {
 				return &device
 			}
@@ -170,7 +235,7 @@ func getUPnPDescription(ip string, port int) *UPnPDevice {
 	return nil
 }
 
-func getUPnPDescriptionFromURL(url string) *UPnPDevice {
+func getUPnPDescriptionFromURL(url string) *common.UPnPDevice {
 	client := &http.Client{Timeout: 3 * time.Second}
 
 	resp, err := client.Get(url)
@@ -180,7 +245,7 @@ func getUPnPDescriptionFromURL(url string) *UPnPDevice {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 {
-		var device UPnPDevice
+		var device common.UPnPDevice
 		if err := xml.NewDecoder(resp.Body).Decode(&device); err == nil {
 			return &device
 		}
@@ -188,16 +253,13 @@ func getUPnPDescriptionFromURL(url string) *UPnPDevice {
 	return nil
 }
 
-func checkUPnPPortMappings(router *RouterInfo, baseURL string) {
-	// Extract base URL for SOAP requests
-	// Example: http://10.44.10.1:33163/rootDesc.xml -> http://10.44.10.1:33163
+func checkUPnPPortMappings(router *common.RouterInfo, baseURL string) {
 	parts := strings.Split(baseURL, "/")
 	if len(parts) < 4 {
 		return
 	}
 	soapBaseURL := strings.Join(parts[:3], "/")
 
-	// Try to get port mappings
 	mappings := getPortMappings(soapBaseURL)
 	if len(mappings) > 0 {
 		router.PortMappings = mappings
@@ -210,7 +272,7 @@ func checkUPnPPortMappings(router *RouterInfo, baseURL string) {
 				mapping.Protocol)
 		}
 
-		router.Issues = append(router.Issues, SecurityIssue{
+		router.Issues = append(router.Issues, common.SecurityIssue{
 			Severity:    "HIGH",
 			Description: "Active UPnP port mappings detected",
 			Details:     fmt.Sprintf("Found %d active port forwarding rules that may expose internal services", len(mappings)),
@@ -218,12 +280,11 @@ func checkUPnPPortMappings(router *RouterInfo, baseURL string) {
 	}
 }
 
-func getPortMappings(baseURL string) []PortMapping {
+func getPortMappings(baseURL string) []common.PortMapping {
 	client := &http.Client{Timeout: 5 * time.Second}
-	var mappings []PortMapping
+	var mappings []common.PortMapping
 
-	// Try to enumerate port mappings
-	for i := 0; i < 50; i++ { // Check first 50 entries
+	for i := 0; i < 50; i++ {
 		soapBody := fmt.Sprintf(`<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
 <s:Body>
@@ -252,7 +313,6 @@ func getPortMappings(baseURL string) []PortMapping {
 			break
 		}
 
-		// Parse the SOAP response (simplified)
 		content := string(body)
 		if strings.Contains(content, "NewExternalPort") {
 			mapping := parsePortMapping(content)
@@ -260,17 +320,16 @@ func getPortMappings(baseURL string) []PortMapping {
 				mappings = append(mappings, mapping)
 			}
 		} else {
-			break // No more mappings
+			break
 		}
 	}
 
 	return mappings
 }
 
-func parsePortMapping(soapResponse string) PortMapping {
-	mapping := PortMapping{}
+func parsePortMapping(soapResponse string) common.PortMapping {
+	mapping := common.PortMapping{}
 
-	// Extract values using simple string matching (could be improved with proper XML parsing)
 	if match := regexp.MustCompile(`<NewExternalPort>(\d+)</NewExternalPort>`).FindStringSubmatch(soapResponse); len(match) > 1 {
 		if port, err := strconv.Atoi(match[1]); err == nil {
 			mapping.ExternalPort = port
