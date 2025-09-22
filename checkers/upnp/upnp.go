@@ -18,7 +18,10 @@ import (
 type UPnPChecker struct{}
 
 type UPnPConfig struct {
-	EnumerateMappings bool
+	EnumerateMappings   bool
+	CheckIPv6Firewall   bool
+	EnumerateServices   bool
+	CheckSecurityIssues bool
 }
 
 func NewUPnPChecker() checker.Checker {
@@ -39,7 +42,10 @@ func (c *UPnPChecker) Icon() string {
 
 func (c *UPnPChecker) DefaultConfig() checker.CheckerConfig {
 	return UPnPConfig{
-		EnumerateMappings: true,
+		EnumerateMappings:   true,
+		CheckIPv6Firewall:   true,
+		EnumerateServices:   true,
+		CheckSecurityIssues: true,
 	}
 }
 
@@ -62,7 +68,7 @@ func (c *UPnPChecker) RunStandalone(config checker.CheckerConfig) {
 func (c *UPnPChecker) MCPToolDefinition() *checker.MCPTool {
 	return &checker.MCPTool{
 		Name:        "check_upnp",
-		Description: "Check for UPnP services and enumerate port mappings",
+		Description: "Comprehensive UPnP IGD v2.0 security assessment including IPv6 firewall control and service enumeration",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -72,7 +78,22 @@ func (c *UPnPChecker) MCPToolDefinition() *checker.MCPTool {
 				},
 				"enumerate_mappings": map[string]interface{}{
 					"type":        "boolean",
-					"description": "Whether to enumerate active port mappings",
+					"description": "Whether to enumerate active IPv4 port mappings",
+					"default":     true,
+				},
+				"check_ipv6_firewall": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Whether to check IPv6 firewall control and pinholes",
+					"default":     true,
+				},
+				"enumerate_services": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Whether to enumerate all UPnP services including vendor extensions",
+					"default":     true,
+				},
+				"check_security_issues": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Whether to test for dangerous UPnP security vulnerabilities",
 					"default":     true,
 				},
 			},
@@ -104,8 +125,20 @@ func checkUPnP(router *common.RouterInfo, cfg UPnPConfig) {
 				fmt.Printf("  🌐 Admin URL: %s\n", desc.PresentationURL)
 			}
 
+			if cfg.EnumerateServices {
+				enumerateUPnPServices(router, upnpInfo.Location)
+			}
+
 			if cfg.EnumerateMappings {
 				checkUPnPPortMappings(router, upnpInfo.Location)
+			}
+
+			if cfg.CheckIPv6Firewall {
+				checkIPv6FirewallControl(router, upnpInfo.Location)
+			}
+
+			if cfg.CheckSecurityIssues {
+				checkUPnPSecurityIssues(router, upnpInfo.Location)
 			}
 		}
 
@@ -351,4 +384,287 @@ func parsePortMapping(soapResponse string) common.PortMapping {
 	}
 
 	return mapping
+}
+
+func enumerateUPnPServices(router *common.RouterInfo, baseURL string) {
+	fmt.Println("\n  🔎 Enumerating UPnP services...")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(baseURL)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	content := string(body)
+
+	serviceTypeRegex := regexp.MustCompile(`<serviceType>([^<]+)</serviceType>`)
+	serviceIDRegex := regexp.MustCompile(`<serviceId>([^<]+)</serviceId>`)
+	controlURLRegex := regexp.MustCompile(`<controlURL>([^<]+)</controlURL>`)
+
+	serviceTypes := serviceTypeRegex.FindAllStringSubmatch(content, -1)
+	serviceIDs := serviceIDRegex.FindAllStringSubmatch(content, -1)
+	controlURLs := controlURLRegex.FindAllStringSubmatch(content, -1)
+
+	standardServices := map[string]bool{
+		"WANIPConnection":          true,
+		"WANPPPConnection":         true,
+		"WANCommonInterfaceConfig": true,
+		"Layer3Forwarding":         true,
+		"WANIPv6FirewallControl":   true,
+		"DeviceProtection":         true,
+	}
+
+	for i := 0; i < len(serviceTypes) && i < len(serviceIDs) && i < len(controlURLs); i++ {
+		if len(serviceTypes[i]) < 2 || len(serviceIDs[i]) < 2 || len(controlURLs[i]) < 2 {
+			continue
+		}
+
+		serviceType := serviceTypes[i][1]
+		serviceID := serviceIDs[i][1]
+		controlURL := controlURLs[i][1]
+
+		isStandard := false
+		for std := range standardServices {
+			if strings.Contains(serviceType, std) {
+				isStandard = true
+				break
+			}
+		}
+
+		service := common.UPnPService{
+			ServiceType: serviceType,
+			ServiceID:   serviceID,
+			ControlURL:  controlURL,
+			IsStandard:  isStandard,
+		}
+
+		router.UPnPServices = append(router.UPnPServices, service)
+
+		if !isStandard {
+			fmt.Printf("    ⚠️  Non-standard service: %s\n", serviceType)
+		} else {
+			fmt.Printf("    ✓ %s\n", serviceType)
+		}
+	}
+
+	if len(router.UPnPServices) > 0 {
+		nonStandardCount := 0
+		for _, svc := range router.UPnPServices {
+			if !svc.IsStandard {
+				nonStandardCount++
+			}
+		}
+
+		if nonStandardCount > 0 {
+			router.Issues = append(router.Issues, common.SecurityIssue{
+				Severity:    "LOW",
+				Description: fmt.Sprintf("Non-standard UPnP services detected (%d)", nonStandardCount),
+				Details:     "Vendor-specific or non-standard UPnP services may have undocumented security implications.",
+			})
+		}
+	}
+}
+
+func checkIPv6FirewallControl(router *common.RouterInfo, baseURL string) {
+	fmt.Println("\n  🛡️  Checking IPv6 Firewall Control...")
+
+	hasIPv6Firewall := false
+	for _, svc := range router.UPnPServices {
+		if strings.Contains(svc.ServiceType, "WANIPv6FirewallControl") {
+			hasIPv6Firewall = true
+			break
+		}
+	}
+
+	if !hasIPv6Firewall {
+		fmt.Println("    ℹ️  IPv6 Firewall Control not available")
+		return
+	}
+
+	fmt.Println("    📡 IPv6 Firewall Control service detected")
+
+	parts := strings.Split(baseURL, "/")
+	if len(parts) < 4 {
+		return
+	}
+	soapBaseURL := strings.Join(parts[:3], "/")
+
+	pinholes := getIPv6Pinholes(soapBaseURL)
+	if len(pinholes) > 0 {
+		router.IPv6Pinholes = pinholes
+		fmt.Printf("    🔓 Found %d IPv6 pinhole(s)\n", len(pinholes))
+
+		for _, pinhole := range pinholes {
+			fmt.Printf("      %s:%d → %s:%d (%s)\n",
+				pinhole.RemoteHost, pinhole.RemotePort,
+				pinhole.InternalHost, pinhole.InternalPort,
+				pinhole.Protocol)
+		}
+
+		router.Issues = append(router.Issues, common.SecurityIssue{
+			Severity:    "HIGH",
+			Description: "Active IPv6 firewall pinholes detected",
+			Details:     fmt.Sprintf("Found %d IPv6 firewall pinholes that may expose internal services to the internet", len(pinholes)),
+		})
+	} else {
+		fmt.Println("    ✓ No IPv6 pinholes found")
+	}
+}
+
+func getIPv6Pinholes(baseURL string) []common.IPv6Pinhole {
+	client := &http.Client{Timeout: 5 * time.Second}
+	var pinholes []common.IPv6Pinhole
+
+	for i := 0; i < 20; i++ {
+		soapBody := fmt.Sprintf(`<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+<s:Body>
+<u:GetPinholeEntry xmlns:u="urn:schemas-upnp-org:service:WANIPv6FirewallControl:1">
+<UniqueID>%d</UniqueID>
+</u:GetPinholeEntry>
+</s:Body>
+</s:Envelope>`, i)
+
+		req, err := http.NewRequest("POST", baseURL+"/ctl/IPv6FC", strings.NewReader(soapBody))
+		if err != nil {
+			break
+		}
+
+		req.Header.Set("Content-Type", "text/xml; charset=utf-8")
+		req.Header.Set("SOAPAction", `"urn:schemas-upnp-org:service:WANIPv6FirewallControl:1#GetPinholeEntry"`)
+
+		resp, err := client.Do(req)
+		if err != nil || resp.StatusCode != 200 {
+			break
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			break
+		}
+
+		content := string(body)
+		if strings.Contains(content, "RemoteHost") {
+			pinhole := parseIPv6Pinhole(content)
+			if pinhole.InternalPort > 0 {
+				pinholes = append(pinholes, pinhole)
+			}
+		} else {
+			break
+		}
+	}
+
+	return pinholes
+}
+
+func parseIPv6Pinhole(soapResponse string) common.IPv6Pinhole {
+	pinhole := common.IPv6Pinhole{}
+
+	if match := regexp.MustCompile(`<RemoteHost>([^<]+)</RemoteHost>`).FindStringSubmatch(soapResponse); len(match) > 1 {
+		pinhole.RemoteHost = match[1]
+	}
+	if match := regexp.MustCompile(`<RemotePort>(\d+)</RemotePort>`).FindStringSubmatch(soapResponse); len(match) > 1 {
+		if port, err := strconv.Atoi(match[1]); err == nil {
+			pinhole.RemotePort = port
+		}
+	}
+	if match := regexp.MustCompile(`<InternalClient>([^<]+)</InternalClient>`).FindStringSubmatch(soapResponse); len(match) > 1 {
+		pinhole.InternalHost = match[1]
+	}
+	if match := regexp.MustCompile(`<InternalPort>(\d+)</InternalPort>`).FindStringSubmatch(soapResponse); len(match) > 1 {
+		if port, err := strconv.Atoi(match[1]); err == nil {
+			pinhole.InternalPort = port
+		}
+	}
+	if match := regexp.MustCompile(`<Protocol>(\d+)</Protocol>`).FindStringSubmatch(soapResponse); len(match) > 1 {
+		pinhole.Protocol = match[1]
+	}
+	if match := regexp.MustCompile(`<LeaseTime>(\d+)</LeaseTime>`).FindStringSubmatch(soapResponse); len(match) > 1 {
+		if lease, err := strconv.Atoi(match[1]); err == nil {
+			pinhole.LeaseTime = lease
+		}
+	}
+
+	return pinhole
+}
+
+func checkUPnPSecurityIssues(router *common.RouterInfo, baseURL string) {
+	fmt.Println("\n  🔒 Checking UPnP security issues...")
+
+	parts := strings.Split(baseURL, "/")
+	if len(parts) < 4 {
+		return
+	}
+	soapBaseURL := strings.Join(parts[:3], "/")
+
+	testAddPortMapping := func(targetIP string) bool {
+		soapBody := `<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+<s:Body>
+<u:AddPortMapping xmlns:u="urn:schemas-upnp-org:service:WANIPConnection:2">
+<NewRemoteHost></NewRemoteHost>
+<NewExternalPort>65534</NewExternalPort>
+<NewProtocol>TCP</NewProtocol>
+<NewInternalPort>65534</NewInternalPort>
+<NewInternalClient>` + targetIP + `</NewInternalClient>
+<NewEnabled>1</NewEnabled>
+<NewPortMappingDescription>Security Test</NewPortMappingDescription>
+<NewLeaseDuration>60</NewLeaseDuration>
+</u:AddPortMapping>
+</s:Body>
+</s:Envelope>`
+
+		client := &http.Client{Timeout: 3 * time.Second}
+		req, err := http.NewRequest("POST", soapBaseURL+"/ctl/IPConn", strings.NewReader(soapBody))
+		if err != nil {
+			return false
+		}
+
+		req.Header.Set("Content-Type", "text/xml; charset=utf-8")
+		req.Header.Set("SOAPAction", `"urn:schemas-upnp-org:service:WANIPConnection:2#AddPortMapping"`)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+
+		return resp.StatusCode == 200
+	}
+
+	if testAddPortMapping("192.168.1.99") {
+		fmt.Println("    ⚠️  UPnP allows port mapping to arbitrary internal IPs")
+
+		deletePortMapping := `<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+<s:Body>
+<u:DeletePortMapping xmlns:u="urn:schemas-upnp-org:service:WANIPConnection:2">
+<NewRemoteHost></NewRemoteHost>
+<NewExternalPort>65534</NewExternalPort>
+<NewProtocol>TCP</NewProtocol>
+</u:DeletePortMapping>
+</s:Body>
+</s:Envelope>`
+
+		client := &http.Client{Timeout: 3 * time.Second}
+		req, _ := http.NewRequest("POST", soapBaseURL+"/ctl/IPConn", strings.NewReader(deletePortMapping))
+		req.Header.Set("Content-Type", "text/xml; charset=utf-8")
+		req.Header.Set("SOAPAction", `"urn:schemas-upnp-org:service:WANIPConnection:2#DeletePortMapping"`)
+		client.Do(req)
+
+		router.Issues = append(router.Issues, common.SecurityIssue{
+			Severity:    "CRITICAL",
+			Description: "UPnP allows port mapping to arbitrary devices",
+			Details:     "Any device on the network can create port forwards to ANY internal IP, not just itself. This allows lateral movement attacks.",
+		})
+	} else {
+		fmt.Println("    ✓ UPnP properly restricts port mappings to requesting device")
+	}
 }

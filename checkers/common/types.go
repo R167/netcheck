@@ -42,6 +42,8 @@ type RouterInfo struct {
 	IPv6Enabled   bool
 	MDNSEnabled   bool
 	PortMappings  []PortMapping
+	IPv6Pinholes  []IPv6Pinhole
+	UPnPServices  []UPnPService
 	MDNSServices  []MDNSService
 	Issues        []SecurityIssue
 	Starlink      interface{}
@@ -78,4 +80,23 @@ type MDNSService struct {
 	IP      string
 	Port    int
 	TXTData []string
+}
+
+type IPv6Pinhole struct {
+	RemoteHost   string
+	RemotePort   int
+	InternalHost string
+	InternalPort int
+	Protocol     string
+	LeaseTime    int
+	Description  string
+}
+
+type UPnPService struct {
+	ServiceType string
+	ServiceID   string
+	ControlURL  string
+	EventSubURL string
+	SCPDURL     string
+	IsStandard  bool
 }
