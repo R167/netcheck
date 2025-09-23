@@ -41,6 +41,10 @@ func (c *NATpmpChecker) DefaultEnabled() bool {
 	return true
 }
 
+func (c *NATpmpChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyGateway, checker.DependencyRouterInfo}
+}
+
 func (c *NATpmpChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	checkNATpmp(router)
 }

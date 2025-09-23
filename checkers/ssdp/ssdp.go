@@ -54,6 +54,10 @@ func (c *SSDPChecker) DefaultEnabled() bool {
 	return false
 }
 
+func (c *SSDPChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyNetwork, checker.DependencyRouterInfo}
+}
+
 func (c *SSDPChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	cfg := config.(SSDPConfig)
 	discoverSSDPServices(router, cfg)

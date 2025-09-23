@@ -41,6 +41,10 @@ func (c *RoutesChecker) DefaultEnabled() bool {
 	return true
 }
 
+func (c *RoutesChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{}
+}
+
 func (c *RoutesChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	// Standalone checker - no router-based functionality
 }

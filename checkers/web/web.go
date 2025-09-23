@@ -166,6 +166,10 @@ func (c *WebChecker) DefaultEnabled() bool {
 	return true
 }
 
+func (c *WebChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyGateway, checker.DependencyRouterInfo}
+}
+
 func (c *WebChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	cfg := config.(WebConfig)
 	checkWebInterface(router, cfg)

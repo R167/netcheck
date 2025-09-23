@@ -6,6 +6,14 @@ import (
 
 type CheckerConfig interface{}
 
+type Dependency string
+
+const (
+	DependencyGateway    Dependency = "gateway"
+	DependencyRouterInfo Dependency = "router-info"
+	DependencyNetwork    Dependency = "network"
+)
+
 type Checker interface {
 	Name() string
 	Description() string
@@ -13,6 +21,7 @@ type Checker interface {
 	DefaultConfig() CheckerConfig
 	RequiresRouter() bool
 	DefaultEnabled() bool
+	Dependencies() []Dependency
 	Run(config CheckerConfig, router *common.RouterInfo)
 	RunStandalone(config CheckerConfig)
 	MCPToolDefinition() *MCPTool
@@ -31,4 +40,10 @@ type CheckFlag struct {
 	Checker        Checker
 	RequiresRouter bool
 	DefaultEnabled bool
+}
+
+type BaseChecker struct{}
+
+func (b *BaseChecker) Dependencies() []Dependency {
+	return []Dependency{}
 }

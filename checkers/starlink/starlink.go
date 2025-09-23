@@ -41,6 +41,10 @@ func (c *StarlinkChecker) DefaultEnabled() bool {
 	return false
 }
 
+func (c *StarlinkChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyNetwork, checker.DependencyRouterInfo}
+}
+
 func (c *StarlinkChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	checkStarlink(router)
 }

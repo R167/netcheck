@@ -72,6 +72,10 @@ func (c *APIChecker) DefaultEnabled() bool {
 	return true
 }
 
+func (c *APIChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyGateway, checker.DependencyRouterInfo}
+}
+
 func (c *APIChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	checkRouterAPIs(router)
 }

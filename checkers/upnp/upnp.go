@@ -57,6 +57,10 @@ func (c *UPnPChecker) DefaultEnabled() bool {
 	return true
 }
 
+func (c *UPnPChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyGateway, checker.DependencyRouterInfo, checker.DependencyNetwork}
+}
+
 func (c *UPnPChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	cfg := config.(UPnPConfig)
 	checkUPnP(router, cfg)

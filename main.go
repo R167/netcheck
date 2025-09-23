@@ -39,64 +39,6 @@ var severityOrder = map[string]int{
 	SeverityLow:      3,
 }
 
-type SecurityIssue struct {
-	Severity    string
-	Description string
-	Details     string
-}
-
-type RouterInfo struct {
-	IP            string
-	Vendor        string
-	Model         string
-	SerialNumber  string
-	ExternalIP    string
-	WebInterface  bool
-	DefaultCreds  bool
-	OpenPorts     []int
-	UPnPEnabled   bool
-	NATpmpEnabled bool
-	IPv6Enabled   bool
-	MDNSEnabled   bool
-	PortMappings  []PortMapping
-	MDNSServices  []MDNSService
-	Issues        []SecurityIssue
-	Starlink      *starlink.StarLinkInfo
-}
-
-type PortMapping struct {
-	ExternalPort int
-	InternalIP   string
-	InternalPort int
-	Protocol     string
-	Description  string
-}
-
-type UPnPDevice struct {
-	DeviceType      string `xml:"device>deviceType"`
-	FriendlyName    string `xml:"device>friendlyName"`
-	Manufacturer    string `xml:"device>manufacturer"`
-	ModelName       string `xml:"device>modelName"`
-	ModelNumber     string `xml:"device>modelNumber"`
-	SerialNumber    string `xml:"device>serialNumber"`
-	PresentationURL string `xml:"device>presentationURL"`
-}
-
-type SSDPResponse struct {
-	Location string
-	Server   string
-	USN      string
-}
-
-type MDNSService struct {
-	Name    string
-	Type    string
-	Domain  string
-	IP      string
-	Port    int
-	TXTData []string
-}
-
 var (
 	// Test category flags
 	allFlag      = flag.Bool("all", false, "Run all available tests")
@@ -200,11 +142,15 @@ func runNetcheck() {
 
 	fmt.Printf("🌐 Gateway IP: %s\n\n", gatewayIP)
 
-	router := &RouterInfo{
+	router := &common.RouterInfo{
 		IP:           gatewayIP,
 		OpenPorts:    []int{},
-		Issues:       []SecurityIssue{},
-		MDNSServices: []MDNSService{},
+		Issues:       []common.SecurityIssue{},
+		MDNSServices: []common.MDNSService{},
+		PortMappings: []common.PortMapping{},
+		IPv6Pinholes: []common.IPv6Pinhole{},
+		UPnPServices: []common.UPnPService{},
+		SSDPServices: []common.SSDPService{},
 	}
 
 	// Run router-based checks
@@ -275,100 +221,7 @@ func getGatewayIP() string {
 	return strings.Join(parts, ".")
 }
 
-func toCommonRouter(r *RouterInfo) *common.RouterInfo {
-	cr := &common.RouterInfo{
-		IP:            r.IP,
-		Vendor:        r.Vendor,
-		Model:         r.Model,
-		SerialNumber:  r.SerialNumber,
-		ExternalIP:    r.ExternalIP,
-		WebInterface:  r.WebInterface,
-		DefaultCreds:  r.DefaultCreds,
-		OpenPorts:     r.OpenPorts,
-		UPnPEnabled:   r.UPnPEnabled,
-		NATpmpEnabled: r.NATpmpEnabled,
-		IPv6Enabled:   r.IPv6Enabled,
-		MDNSEnabled:   r.MDNSEnabled,
-		PortMappings:  make([]common.PortMapping, 0),
-		MDNSServices:  make([]common.MDNSService, 0),
-		Issues:        make([]common.SecurityIssue, 0),
-		Starlink:      r.Starlink,
-	}
-	for _, pm := range r.PortMappings {
-		cr.PortMappings = append(cr.PortMappings, common.PortMapping{
-			ExternalPort: pm.ExternalPort,
-			InternalIP:   pm.InternalIP,
-			InternalPort: pm.InternalPort,
-			Protocol:     pm.Protocol,
-			Description:  pm.Description,
-		})
-	}
-	for _, ms := range r.MDNSServices {
-		cr.MDNSServices = append(cr.MDNSServices, common.MDNSService{
-			Name:    ms.Name,
-			Type:    ms.Type,
-			Domain:  ms.Domain,
-			IP:      ms.IP,
-			Port:    ms.Port,
-			TXTData: ms.TXTData,
-		})
-	}
-	for _, iss := range r.Issues {
-		cr.Issues = append(cr.Issues, common.SecurityIssue{
-			Severity:    iss.Severity,
-			Description: iss.Description,
-			Details:     iss.Details,
-		})
-	}
-	return cr
-}
-
-func fromCommonRouter(r *RouterInfo, cr *common.RouterInfo) {
-	r.Vendor = cr.Vendor
-	r.Model = cr.Model
-	r.SerialNumber = cr.SerialNumber
-	r.WebInterface = cr.WebInterface
-	r.DefaultCreds = cr.DefaultCreds
-	r.OpenPorts = cr.OpenPorts
-	r.UPnPEnabled = cr.UPnPEnabled
-	r.NATpmpEnabled = cr.NATpmpEnabled
-	r.IPv6Enabled = cr.IPv6Enabled
-	r.MDNSEnabled = cr.MDNSEnabled
-
-	r.PortMappings = make([]PortMapping, 0)
-	for _, pm := range cr.PortMappings {
-		r.PortMappings = append(r.PortMappings, PortMapping{
-			ExternalPort: pm.ExternalPort,
-			InternalIP:   pm.InternalIP,
-			InternalPort: pm.InternalPort,
-			Protocol:     pm.Protocol,
-			Description:  pm.Description,
-		})
-	}
-
-	r.MDNSServices = make([]MDNSService, 0)
-	for _, ms := range cr.MDNSServices {
-		r.MDNSServices = append(r.MDNSServices, MDNSService{
-			Name:    ms.Name,
-			Type:    ms.Type,
-			Domain:  ms.Domain,
-			IP:      ms.IP,
-			Port:    ms.Port,
-			TXTData: ms.TXTData,
-		})
-	}
-
-	r.Issues = make([]SecurityIssue, 0)
-	for _, iss := range cr.Issues {
-		r.Issues = append(r.Issues, SecurityIssue{
-			Severity:    iss.Severity,
-			Description: iss.Description,
-			Details:     iss.Details,
-		})
-	}
-}
-
-func generateReport(router *RouterInfo) {
+func generateReport(router *common.RouterInfo) {
 	fmt.Println("\n📊 Security Assessment Report")
 	fmt.Println("=============================")
 
@@ -425,8 +278,10 @@ func generateReport(router *RouterInfo) {
 	}
 
 	// Display Starlink information if detected
-	if router.Starlink != nil && router.Starlink.Accessible {
-		fmt.Print(starlink.FormatStarlinkReport(router.Starlink))
+	if router.Starlink != nil {
+		if slInfo, ok := router.Starlink.(*starlink.StarLinkInfo); ok && slInfo.Accessible {
+			fmt.Print(starlink.FormatStarlinkReport(slInfo))
+		}
 	}
 
 	if len(router.Issues) == 0 {
@@ -435,7 +290,7 @@ func generateReport(router *RouterInfo) {
 	}
 
 	sort.Slice(router.Issues, func(i, j int) bool {
-		return severityOrder[router.Issues[i].Severity] < severityOrder[router.Issues[j].Severity]
+		return common.SeverityOrder[router.Issues[i].Severity] < common.SeverityOrder[router.Issues[j].Severity]
 	})
 
 	fmt.Println("🚨 Security Issues:")
@@ -450,20 +305,20 @@ func generateReport(router *RouterInfo) {
 
 func getEmojiForSeverity(severity string) string {
 	switch severity {
-	case SeverityCritical:
+	case common.SeverityCritical:
 		return "🚨"
-	case SeverityHigh:
+	case common.SeverityHigh:
 		return "⚠️"
-	case SeverityMedium:
+	case common.SeverityMedium:
 		return "🔶"
-	case SeverityLow:
+	case common.SeverityLow:
 		return "ℹ️"
 	default:
 		return "⚠️"
 	}
 }
 
-func printRecommendations(router *RouterInfo) {
+func printRecommendations(router *common.RouterInfo) {
 	fmt.Println("💡 Recommendations:")
 	fmt.Println("• Change all default passwords immediately")
 	fmt.Println("• Disable unnecessary services and ports")
@@ -484,7 +339,7 @@ type Check struct {
 	Description    string
 	Icon           string
 	Flag           *bool
-	RunFunc        func(*RouterInfo)
+	RunFunc        func(*common.RouterInfo)
 	StandaloneFunc func()
 	RequiresRouter bool
 	DefaultEnabled bool
@@ -516,14 +371,12 @@ func buildChecksRegistry() []Check {
 		checkerName := checker.Name()
 		checkerConfig := checker.DefaultConfig()
 
-		var runFunc func(*RouterInfo)
+		var runFunc func(*common.RouterInfo)
 		var standaloneFunc func()
 
 		if checker.RequiresRouter() {
-			runFunc = func(r *RouterInfo) {
-				cr := toCommonRouter(r)
-				checkers.RunChecker(checkerName, checkerConfig, cr)
-				fromCommonRouter(r, cr)
+			runFunc = func(r *common.RouterInfo) {
+				checkers.RunChecker(checkerName, checkerConfig, r)
 			}
 		} else {
 			standaloneFunc = func() {

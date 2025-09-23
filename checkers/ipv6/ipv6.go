@@ -75,6 +75,10 @@ func (c *IPv6Checker) DefaultEnabled() bool {
 	return true
 }
 
+func (c *IPv6Checker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyNetwork, checker.DependencyRouterInfo}
+}
+
 func (c *IPv6Checker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	cfg := config.(IPv6Config)
 	checkIPv6(router, cfg)

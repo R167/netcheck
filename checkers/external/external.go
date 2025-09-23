@@ -85,6 +85,10 @@ func (c *ExternalChecker) DefaultEnabled() bool {
 	return true
 }
 
+func (c *ExternalChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{}
+}
+
 func (c *ExternalChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	// Standalone checker - no router-based functionality
 }

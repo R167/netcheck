@@ -52,6 +52,10 @@ func (c *MDNSChecker) DefaultEnabled() bool {
 	return true
 }
 
+func (c *MDNSChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyNetwork, checker.DependencyRouterInfo}
+}
+
 func (c *MDNSChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	cfg := config.(MDNSConfig)
 	checkMDNS(router, cfg)

@@ -66,6 +66,10 @@ func (c *PortsChecker) DefaultEnabled() bool {
 	return true
 }
 
+func (c *PortsChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyGateway, checker.DependencyRouterInfo}
+}
+
 func (c *PortsChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	cfg := config.(PortsConfig)
 	scanCommonPorts(router, cfg)

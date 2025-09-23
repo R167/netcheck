@@ -61,6 +61,10 @@ func (c *LLDPChecker) DefaultEnabled() bool {
 	return true
 }
 
+func (c *LLDPChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{}
+}
+
 func (c *LLDPChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	// Standalone checker - no router-based functionality
 }

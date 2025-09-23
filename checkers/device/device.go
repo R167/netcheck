@@ -46,6 +46,10 @@ func (c *DeviceChecker) DefaultEnabled() bool {
 	return true
 }
 
+func (c *DeviceChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{}
+}
+
 func (c *DeviceChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
 	// Standalone checker - no router-based functionality
 }
