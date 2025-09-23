@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/output"
 )
 
 func TestCheckRouterAPIs(t *testing.T) {
@@ -96,7 +97,8 @@ func TestCheckRouterAPIs(t *testing.T) {
 				IP: server.URL[7:],
 			}
 
-			checkRouterAPIs(router)
+			out := output.NewNoOpOutput()
+			checkRouterAPIs(router, out)
 
 			if len(router.Issues) != tt.expectIssues {
 				t.Errorf("Expected %d issues, got %d", tt.expectIssues, len(router.Issues))
@@ -186,7 +188,8 @@ func TestCheckWPS(t *testing.T) {
 				IP: server.URL[7:],
 			}
 
-			checkWPS(router)
+			out := output.NewNoOpOutput()
+			checkWPS(router, out)
 
 			hasWPSIssue := false
 			for _, issue := range router.Issues {
@@ -306,11 +309,15 @@ func TestAPIChecker_Interface(t *testing.T) {
 
 func TestAPICheckerHTTPErrors(t *testing.T) {
 	t.Run("Server connection failures", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("Skipping slow timeout test in short mode")
+		}
 		router := &common.RouterInfo{
 			IP: "192.0.2.1",
 		}
 
-		checkRouterAPIs(router)
+		out := output.NewNoOpOutput()
+		checkRouterAPIs(router, out)
 
 		if len(router.Issues) > 0 {
 			t.Error("Should not report issues when server is unreachable")
@@ -334,7 +341,8 @@ func TestAPICheckerHTTPErrors(t *testing.T) {
 			IP: server.URL[7:],
 		}
 
-		checkRouterAPIs(router)
+		out := output.NewNoOpOutput()
+		checkRouterAPIs(router, out)
 
 		if len(router.Issues) > 0 {
 			t.Error("Should not report issues for non-200 status codes")
@@ -363,7 +371,8 @@ func TestMultipleAPIEndpoints(t *testing.T) {
 		IP: server.URL[7:],
 	}
 
-	checkRouterAPIs(router)
+	out := output.NewNoOpOutput()
+	checkRouterAPIs(router, out)
 
 	if len(router.Issues) != 3 {
 		t.Errorf("Expected 3 HIGH severity issues, got %d issues", len(router.Issues))
@@ -389,7 +398,8 @@ func BenchmarkCheckRouterAPIs(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		router.Issues = nil
-		checkRouterAPIs(router)
+		out := output.NewNoOpOutput()
+		checkRouterAPIs(router, out)
 	}
 }
 
@@ -406,6 +416,7 @@ func BenchmarkCheckWPS(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		router.Issues = nil
-		checkWPS(router)
+		out := output.NewNoOpOutput()
+		checkWPS(router, out)
 	}
 }

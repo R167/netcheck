@@ -13,6 +13,7 @@ import (
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type UPnPChecker struct{}
@@ -57,12 +58,16 @@ func (c *UPnPChecker) DefaultEnabled() bool {
 	return true
 }
 
-func (c *UPnPChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
-	cfg := config.(UPnPConfig)
-	checkUPnP(router, cfg)
+func (c *UPnPChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyGateway, checker.DependencyRouterInfo, checker.DependencyNetwork}
 }
 
-func (c *UPnPChecker) RunStandalone(config checker.CheckerConfig) {
+func (c *UPnPChecker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
+	cfg := config.(UPnPConfig)
+	checkUPnP(router, cfg, out)
+}
+
+func (c *UPnPChecker) RunStandalone(config checker.CheckerConfig, out output.Output) {
 }
 
 func (c *UPnPChecker) MCPToolDefinition() *checker.MCPTool {
@@ -102,43 +107,43 @@ func (c *UPnPChecker) MCPToolDefinition() *checker.MCPTool {
 	}
 }
 
-func checkUPnP(router *common.RouterInfo, cfg UPnPConfig) {
-	fmt.Println("\n🔍 Checking UPnP services...")
+func checkUPnP(router *common.RouterInfo, cfg UPnPConfig, out output.Output) {
+	out.Section("🔍", "Checking UPnP services...")
 
 	upnpInfo := checkSSDPMulticast()
 	if upnpInfo != nil {
 		router.UPnPEnabled = true
-		fmt.Println("  📡 UPnP SSDP discovered")
-		fmt.Printf("  🔗 Location: %s\n", upnpInfo.Location)
-		fmt.Printf("  🖥️  Server: %s\n", upnpInfo.Server)
+		out.Info("📡 UPnP SSDP discovered")
+		out.Info("🔗 Location: %s", upnpInfo.Location)
+		out.Info("🖥️  Server: %s", upnpInfo.Server)
 
 		if desc := getUPnPDescriptionFromURL(upnpInfo.Location); desc != nil {
-			fmt.Printf("  📄 Device: %s (%s)\n", desc.FriendlyName, desc.Manufacturer)
+			out.Info("📄 Device: %s (%s)", desc.FriendlyName, desc.Manufacturer)
 			if desc.ModelName != "" {
 				router.Model = desc.ModelName
 			}
 			if desc.SerialNumber != "" {
 				router.SerialNumber = desc.SerialNumber
-				fmt.Printf("  🔢 Serial: %s\n", desc.SerialNumber)
+				out.Info("🔢 Serial: %s", desc.SerialNumber)
 			}
 			if desc.PresentationURL != "" {
-				fmt.Printf("  🌐 Admin URL: %s\n", desc.PresentationURL)
+				out.Info("🌐 Admin URL: %s", desc.PresentationURL)
 			}
 
 			if cfg.EnumerateServices {
-				enumerateUPnPServices(router, upnpInfo.Location)
+				enumerateUPnPServices(router, upnpInfo.Location, out)
 			}
 
 			if cfg.EnumerateMappings {
-				checkUPnPPortMappings(router, upnpInfo.Location)
+				checkUPnPPortMappings(router, upnpInfo.Location, out)
 			}
 
 			if cfg.CheckIPv6Firewall {
-				checkIPv6FirewallControl(router, upnpInfo.Location)
+				checkIPv6FirewallControl(router, upnpInfo.Location, out)
 			}
 
 			if cfg.CheckSecurityIssues {
-				checkUPnPSecurityIssues(router, upnpInfo.Location)
+				checkUPnPSecurityIssues(router, upnpInfo.Location, out)
 			}
 		}
 
@@ -157,10 +162,10 @@ func checkUPnP(router *common.RouterInfo, cfg UPnPConfig) {
 			conn.Close()
 
 			router.UPnPEnabled = true
-			fmt.Printf("  ✅ UPnP service on port %d\n", port)
+			out.Success("UPnP service on port %d", port)
 
 			if desc := getUPnPDescription(router.IP, port); desc != nil {
-				fmt.Printf("  📄 Device: %s (%s)\n", desc.FriendlyName, desc.Manufacturer)
+				out.Info("📄 Device: %s (%s)", desc.FriendlyName, desc.Manufacturer)
 				if desc.ModelName != "" {
 					router.Model = desc.ModelName
 				}
@@ -169,7 +174,7 @@ func checkUPnP(router *common.RouterInfo, cfg UPnPConfig) {
 	}
 
 	if !router.UPnPEnabled {
-		fmt.Println("  ✅ No UPnP services detected")
+		out.Success("No UPnP services detected")
 	}
 }
 
@@ -286,7 +291,7 @@ func getUPnPDescriptionFromURL(url string) *common.UPnPDevice {
 	return nil
 }
 
-func checkUPnPPortMappings(router *common.RouterInfo, baseURL string) {
+func checkUPnPPortMappings(router *common.RouterInfo, baseURL string, out output.Output) {
 	parts := strings.Split(baseURL, "/")
 	if len(parts) < 4 {
 		return
@@ -296,10 +301,10 @@ func checkUPnPPortMappings(router *common.RouterInfo, baseURL string) {
 	mappings := getPortMappings(soapBaseURL)
 	if len(mappings) > 0 {
 		router.PortMappings = mappings
-		fmt.Printf("  🔓 Found %d port mapping(s)\n", len(mappings))
+		out.Info("🔓 Found %d port mapping(s)", len(mappings))
 
 		for _, mapping := range mappings {
-			fmt.Printf("    %s:%d → %s:%d (%s)\n",
+			out.Info("  %s:%d → %s:%d (%s)",
 				"*", mapping.ExternalPort,
 				mapping.InternalIP, mapping.InternalPort,
 				mapping.Protocol)
@@ -386,8 +391,8 @@ func parsePortMapping(soapResponse string) common.PortMapping {
 	return mapping
 }
 
-func enumerateUPnPServices(router *common.RouterInfo, baseURL string) {
-	fmt.Println("\n  🔎 Enumerating UPnP services...")
+func enumerateUPnPServices(router *common.RouterInfo, baseURL string, out output.Output) {
+	out.Section("🔎", "Enumerating UPnP services...")
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(baseURL)
@@ -447,9 +452,9 @@ func enumerateUPnPServices(router *common.RouterInfo, baseURL string) {
 		router.UPnPServices = append(router.UPnPServices, service)
 
 		if !isStandard {
-			fmt.Printf("    ⚠️  Non-standard service: %s\n", serviceType)
+			out.Warning("Non-standard service: %s", serviceType)
 		} else {
-			fmt.Printf("    ✓ %s\n", serviceType)
+			out.Info("✓ %s", serviceType)
 		}
 	}
 
@@ -471,8 +476,8 @@ func enumerateUPnPServices(router *common.RouterInfo, baseURL string) {
 	}
 }
 
-func checkIPv6FirewallControl(router *common.RouterInfo, baseURL string) {
-	fmt.Println("\n  🛡️  Checking IPv6 Firewall Control...")
+func checkIPv6FirewallControl(router *common.RouterInfo, baseURL string, out output.Output) {
+	out.Section("🛡️", "Checking IPv6 Firewall Control...")
 
 	// Find the IPv6 firewall control service
 	var ipv6Service *common.UPnPService
@@ -484,11 +489,11 @@ func checkIPv6FirewallControl(router *common.RouterInfo, baseURL string) {
 	}
 
 	if ipv6Service == nil {
-		fmt.Println("    ℹ️  IPv6 Firewall Control not available")
+		out.Info("ℹ️  IPv6 Firewall Control not available")
 		return
 	}
 
-	fmt.Println("    📡 IPv6 Firewall Control service detected")
+	out.Info("📡 IPv6 Firewall Control service detected")
 
 	// Extract base URL for SOAP requests
 	parts := strings.Split(baseURL, "/")
@@ -500,12 +505,12 @@ func checkIPv6FirewallControl(router *common.RouterInfo, baseURL string) {
 	// Get firewall status using the correct control URL
 	status := getIPv6FirewallStatus(soapBaseURL, ipv6Service.ControlURL)
 	if status != nil {
-		fmt.Printf("    🔥 Firewall Enabled: %t\n", status.FirewallEnabled)
-		fmt.Printf("    🔓 Inbound Pinholes Allowed: %t\n", status.InboundPinholeAllowed)
+		out.Info("🔥 Firewall Enabled: %t", status.FirewallEnabled)
+		out.Info("🔓 Inbound Pinholes Allowed: %t", status.InboundPinholeAllowed)
 
 		// Note: IPv6 firewall control service doesn't provide pinhole enumeration
 		// Unlike IPv4 port mappings, there's no standard way to list all pinholes
-		fmt.Println("    ℹ️  IPv6 pinhole enumeration not supported by UPnP standard")
+		out.Info("ℹ️  IPv6 pinhole enumeration not supported by UPnP standard")
 
 		// If pinholes are allowed but firewall is enabled, it's a potential security concern
 		if status.InboundPinholeAllowed {
@@ -523,10 +528,10 @@ func checkIPv6FirewallControl(router *common.RouterInfo, baseURL string) {
 				Details:     "IPv6 firewall protection is disabled, potentially exposing internal services to the internet.",
 			})
 		} else {
-			fmt.Println("    ✓ IPv6 firewall is properly enabled")
+			out.Success("IPv6 firewall is properly enabled")
 		}
 	} else {
-		fmt.Println("    ⚠️  Could not retrieve IPv6 firewall status")
+		out.Warning("Could not retrieve IPv6 firewall status")
 	}
 }
 
@@ -585,8 +590,8 @@ func getIPv6FirewallStatus(baseURL, controlURL string) *IPv6FirewallStatus {
 // does not provide a standard method to enumerate existing pinholes.
 // Individual pinholes can only be checked if their UniqueID is known.
 
-func checkUPnPSecurityIssues(router *common.RouterInfo, baseURL string) {
-	fmt.Println("\n  🔒 Checking UPnP security issues...")
+func checkUPnPSecurityIssues(router *common.RouterInfo, baseURL string, out output.Output) {
+	out.Section("🔒", "Checking UPnP security issues...")
 
 	parts := strings.Split(baseURL, "/")
 	if len(parts) < 4 {
@@ -630,7 +635,7 @@ func checkUPnPSecurityIssues(router *common.RouterInfo, baseURL string) {
 	}
 
 	if testAddPortMapping("192.168.1.99") {
-		fmt.Println("    ⚠️  UPnP allows port mapping to arbitrary internal IPs")
+		out.Warning("UPnP allows port mapping to arbitrary internal IPs")
 
 		deletePortMapping := `<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
@@ -655,6 +660,6 @@ func checkUPnPSecurityIssues(router *common.RouterInfo, baseURL string) {
 			Details:     "Any device on the network can create port forwards to ANY internal IP, not just itself. This allows lateral movement attacks.",
 		})
 	} else {
-		fmt.Println("    ✓ UPnP properly restricts port mappings to requesting device")
+		out.Success("UPnP properly restricts port mappings to requesting device")
 	}
 }

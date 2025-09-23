@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/output"
 )
 
 func TestIsPortOpen(t *testing.T) {
@@ -118,7 +119,8 @@ func TestScanCommonPorts(t *testing.T) {
 				PortTimeout: 500 * time.Millisecond,
 			}
 
-			scanCommonPorts(router, cfg)
+			out := output.NewNoOpOutput()
+			scanCommonPorts(router, cfg, out)
 
 			if len(router.OpenPorts) != tt.expectedCount {
 				t.Errorf("Found %d open ports, want %d", len(router.OpenPorts), tt.expectedCount)
@@ -197,7 +199,8 @@ func TestManagementPortSecurityIssues(t *testing.T) {
 				PortTimeout: 500 * time.Millisecond,
 			}
 
-			scanCommonPorts(router, cfg)
+			out := output.NewNoOpOutput()
+			scanCommonPorts(router, cfg, out)
 
 			if tt.expectIssue {
 				if actualPort == tt.port {
@@ -329,7 +332,8 @@ func TestEmptyPortList(t *testing.T) {
 		PortTimeout: 1 * time.Second,
 	}
 
-	scanCommonPorts(router, cfg)
+	out := output.NewNoOpOutput()
+	scanCommonPorts(router, cfg, out)
 
 	if len(router.OpenPorts) != 0 {
 		t.Errorf("Expected no ports to be scanned, got %d", len(router.OpenPorts))
@@ -361,7 +365,8 @@ func TestMultipleOpenPorts(t *testing.T) {
 		PortTimeout: 500 * time.Millisecond,
 	}
 
-	scanCommonPorts(router, cfg)
+	out := output.NewNoOpOutput()
+	scanCommonPorts(router, cfg, out)
 
 	if len(router.OpenPorts) != 5 {
 		t.Errorf("Expected 5 open ports, got %d", len(router.OpenPorts))
@@ -403,6 +408,7 @@ func BenchmarkScanCommonPorts(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		router.OpenPorts = nil
-		scanCommonPorts(router, cfg)
+		out := output.NewNoOpOutput()
+		scanCommonPorts(router, cfg, out)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/output"
 )
 
 func TestSendNATpmpRequest(t *testing.T) {
@@ -46,7 +47,8 @@ func TestCheckNATpmp(t *testing.T) {
 			IP: "127.0.0.1",
 		}
 
-		checkNATpmp(router)
+		out := output.NewNoOpOutput()
+		checkNATpmp(router, out)
 
 		if router.NATpmpEnabled {
 			t.Error("Expected NATpmpEnabled to be false")

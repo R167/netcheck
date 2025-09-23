@@ -10,6 +10,7 @@ import (
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type SSDPChecker struct{}
@@ -54,12 +55,16 @@ func (c *SSDPChecker) DefaultEnabled() bool {
 	return false
 }
 
-func (c *SSDPChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
-	cfg := config.(SSDPConfig)
-	discoverSSDPServices(router, cfg)
+func (c *SSDPChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyNetwork, checker.DependencyRouterInfo}
 }
 
-func (c *SSDPChecker) RunStandalone(config checker.CheckerConfig) {
+func (c *SSDPChecker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
+	cfg := config.(SSDPConfig)
+	discoverSSDPServices(router, cfg, out)
+}
+
+func (c *SSDPChecker) RunStandalone(config checker.CheckerConfig, out output.Output) {
 }
 
 func (c *SSDPChecker) MCPToolDefinition() *checker.MCPTool {
@@ -97,8 +102,8 @@ func (c *SSDPChecker) MCPToolDefinition() *checker.MCPTool {
 	}
 }
 
-func discoverSSDPServices(router *common.RouterInfo, cfg SSDPConfig) {
-	fmt.Println("\n📡 Discovering SSDP services...")
+func discoverSSDPServices(router *common.RouterInfo, cfg SSDPConfig, out output.Output) {
+	out.Section("📡", "Discovering SSDP services...")
 
 	var allServices []common.SSDPService
 
@@ -122,7 +127,7 @@ func discoverSSDPServices(router *common.RouterInfo, cfg SSDPConfig) {
 		deviceGroups := groupServicesByDevice(allServices)
 		totalDevices := len(deviceGroups)
 
-		fmt.Printf("  📊 Found %d unique device(s) with %d total services\n", totalDevices, len(allServices))
+		out.Info("📊 Found %d unique device(s) with %d total services", totalDevices, len(allServices))
 
 		// Categorize devices for display
 		categorizedDevices := make(map[string][]DeviceGroup)
@@ -132,9 +137,9 @@ func discoverSSDPServices(router *common.RouterInfo, cfg SSDPConfig) {
 		}
 
 		for category, groups := range categorizedDevices {
-			fmt.Printf("\n  %s (%d):\n", category, len(groups))
+			out.Info("%s (%d):", category, len(groups))
 			for _, group := range groups {
-				displayDeviceGroup(group)
+				displayDeviceGroup(group, out)
 			}
 		}
 
@@ -147,7 +152,7 @@ func discoverSSDPServices(router *common.RouterInfo, cfg SSDPConfig) {
 
 		assessSecurityRisks(router, categorized)
 	} else {
-		fmt.Println("  ℹ️  No SSDP services discovered")
+		out.Info("ℹ️  No SSDP services discovered")
 	}
 }
 
@@ -369,40 +374,41 @@ func groupServicesByDevice(services []common.SSDPService) []DeviceGroup {
 	return groups
 }
 
-func displayDeviceGroup(group DeviceGroup) {
+func displayDeviceGroup(group DeviceGroup, out output.Output) {
 	svc := group.MainService
 
 	// Main device info
+	deviceInfo := ""
 	if svc.FriendlyName != "" {
-		fmt.Printf("    • %s", svc.FriendlyName)
+		deviceInfo = "  • " + svc.FriendlyName
 		if svc.ModelName != "" && svc.ModelName != svc.FriendlyName {
-			fmt.Printf(" (%s)", svc.ModelName)
+			deviceInfo += " (" + svc.ModelName + ")"
 		}
 	} else if svc.ModelName != "" {
-		fmt.Printf("    • %s", svc.ModelName)
+		deviceInfo = "  • " + svc.ModelName
 	} else {
-		fmt.Printf("    • %s", svc.DeviceType)
+		deviceInfo = "  • " + svc.DeviceType
 	}
 
 	// Add manufacturer if available and different from friendly name
 	if svc.Manufacturer != "" && !strings.Contains(strings.ToLower(svc.FriendlyName), strings.ToLower(svc.Manufacturer)) {
-		fmt.Printf(" [%s]", svc.Manufacturer)
+		deviceInfo += " [" + svc.Manufacturer + "]"
 	}
-	fmt.Println()
+	out.Info(deviceInfo)
 
 	// Location URL (important for security assessment)
 	if svc.Location != "" {
-		fmt.Printf("      🔗 %s\n", svc.Location)
+		out.Info("    🔗 %s", svc.Location)
 	}
 
 	// Server information (reveals software versions)
 	if svc.Server != "" {
-		fmt.Printf("      🖥️  Server: %s\n", svc.Server)
+		out.Info("    🖥️  Server: %s", svc.Server)
 	}
 
 	// Show all services this device offers
 	if len(group.AllServices) > 1 {
-		fmt.Printf("      📱 Services (%d):\n", len(group.AllServices))
+		out.Info("    📱 Services (%d):", len(group.AllServices))
 		for _, serviceSvc := range group.AllServices {
 			if serviceSvc.DeviceType != "" && serviceSvc.DeviceType != "upnp:rootdevice" && serviceSvc.DeviceType != "ssdp:all" {
 				// Clean up service type for display
@@ -417,16 +423,15 @@ func displayDeviceGroup(group DeviceGroup) {
 					serviceType = strings.ReplaceAll(serviceType, ":1", "")
 					serviceType = strings.ReplaceAll(serviceType, ":2", "")
 				}
-				fmt.Printf("        - %s\n", serviceType)
+				out.Info("      - %s", serviceType)
 			}
 		}
 	}
 
 	// IP version
 	if svc.IPVersion != "" {
-		fmt.Printf("      🌐 %s\n", svc.IPVersion)
+		out.Info("    🌐 %s", svc.IPVersion)
 	}
-	fmt.Println()
 }
 
 func assessSecurityRisks(router *common.RouterInfo, categorized map[string][]common.SSDPService) {

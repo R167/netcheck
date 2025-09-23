@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/R167/netcheck/checkers"
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/mcp"
+	"github.com/R167/netcheck/internal/output"
 )
 
 func adaptWebCheck(input *mcp.CheckToolInput) (*mcp.CheckToolOutput, error) {
@@ -15,7 +17,8 @@ func adaptWebCheck(input *mcp.CheckToolInput) (*mcp.CheckToolOutput, error) {
 		Issues: []common.SecurityIssue{},
 	}
 
-	checkers.RunChecker("web", nil, router)
+	out := output.NewStreamingOutput(os.Stdout)
+	checkers.RunChecker("web", nil, router, out)
 
 	issues := make([]mcp.Issue, len(router.Issues))
 	for i, iss := range router.Issues {
@@ -42,7 +45,8 @@ func adaptPortScan(input *mcp.CheckToolInput) (*mcp.CheckToolOutput, error) {
 		OpenPorts: []int{},
 	}
 
-	checkers.RunChecker("ports", nil, router)
+	out := output.NewStreamingOutput(os.Stdout)
+	checkers.RunChecker("ports", nil, router, out)
 
 	issues := make([]mcp.Issue, len(router.Issues))
 	for i, iss := range router.Issues {

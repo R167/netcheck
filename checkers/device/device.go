@@ -8,6 +8,7 @@ import (
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type DeviceChecker struct{}
@@ -46,13 +47,17 @@ func (c *DeviceChecker) DefaultEnabled() bool {
 	return true
 }
 
-func (c *DeviceChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+func (c *DeviceChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{}
+}
+
+func (c *DeviceChecker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
 	// Standalone checker - no router-based functionality
 }
 
-func (c *DeviceChecker) RunStandalone(config checker.CheckerConfig) {
+func (c *DeviceChecker) RunStandalone(config checker.CheckerConfig, out output.Output) {
 	cfg := config.(DeviceConfig)
-	checkDevice(cfg)
+	checkDevice(cfg, out)
 }
 
 func (c *DeviceChecker) MCPToolDefinition() *checker.MCPTool {
@@ -103,7 +108,7 @@ func isVirtualInterface(name string) bool {
 	return false
 }
 
-func checkDevice(cfg DeviceConfig) {
+func checkDevice(cfg DeviceConfig, out output.Output) {
 	fmt.Println("🖥️  Device/Interface Information")
 	fmt.Println("==============================")
 

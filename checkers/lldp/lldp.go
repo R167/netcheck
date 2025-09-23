@@ -8,6 +8,7 @@ import (
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type LLDPChecker struct{}
@@ -61,12 +62,16 @@ func (c *LLDPChecker) DefaultEnabled() bool {
 	return true
 }
 
-func (c *LLDPChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+func (c *LLDPChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{}
+}
+
+func (c *LLDPChecker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
 	// Standalone checker - no router-based functionality
 }
 
-func (c *LLDPChecker) RunStandalone(config checker.CheckerConfig) {
-	checkLLDP()
+func (c *LLDPChecker) RunStandalone(config checker.CheckerConfig, out output.Output) {
+	checkLLDP(out)
 }
 
 func (c *LLDPChecker) MCPToolDefinition() *checker.MCPTool {
@@ -81,7 +86,7 @@ func (c *LLDPChecker) MCPToolDefinition() *checker.MCPTool {
 	}
 }
 
-func checkLLDP() {
+func checkLLDP(out output.Output) {
 	fmt.Println("🔗 Link Layer Discovery Protocol")
 	fmt.Println("===============================")
 

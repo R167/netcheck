@@ -14,6 +14,7 @@ import (
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type MDNSChecker struct{}
@@ -52,12 +53,16 @@ func (c *MDNSChecker) DefaultEnabled() bool {
 	return true
 }
 
-func (c *MDNSChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
-	cfg := config.(MDNSConfig)
-	checkMDNS(router, cfg)
+func (c *MDNSChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyNetwork, checker.DependencyRouterInfo}
 }
 
-func (c *MDNSChecker) RunStandalone(config checker.CheckerConfig) {
+func (c *MDNSChecker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
+	cfg := config.(MDNSConfig)
+	checkMDNS(router, cfg, out)
+}
+
+func (c *MDNSChecker) RunStandalone(config checker.CheckerConfig, out output.Output) {
 	// Router-based checker - no standalone functionality
 }
 
@@ -83,8 +88,8 @@ func (c *MDNSChecker) MCPToolDefinition() *checker.MCPTool {
 	}
 }
 
-func checkMDNS(router *common.RouterInfo, cfg MDNSConfig) {
-	fmt.Println("🔍 Checking mDNS/Bonjour services...")
+func checkMDNS(router *common.RouterInfo, cfg MDNSConfig, out output.Output) {
+	out.Section("🔍", "Checking mDNS/Bonjour services...")
 
 	if cfg.Detailed {
 		// Comprehensive mDNS service discovery
@@ -93,13 +98,13 @@ func checkMDNS(router *common.RouterInfo, cfg MDNSConfig) {
 
 		if len(services) > 0 {
 			router.MDNSEnabled = true
-			fmt.Printf("  📡 Found %d mDNS services\n", len(services))
+			out.Info("📡 Found %d mDNS services", len(services))
 
 			for _, service := range services {
 				if service.IP != "" && service.Port > 0 {
-					fmt.Printf("  🔍 %s (%s) at %s:%d\n", service.Name, service.Type, service.IP, service.Port)
+					out.Info("🔍 %s (%s) at %s:%d", service.Name, service.Type, service.IP, service.Port)
 				} else {
-					fmt.Printf("  🔍 %s (%s)\n", service.Name, service.Type)
+					out.Info("🔍 %s (%s)", service.Name, service.Type)
 				}
 
 				// Check for potentially risky services
@@ -112,13 +117,13 @@ func checkMDNS(router *common.RouterInfo, cfg MDNSConfig) {
 				Details:     fmt.Sprintf("Found %d services advertising via mDNS. Review if all should be exposed.", len(services)),
 			})
 		} else {
-			fmt.Println("  ✅ No mDNS services discovered")
+			out.Success("No mDNS services discovered")
 		}
 	} else {
 		// Basic mDNS detection
 		if sendMDNSQuery() {
 			router.MDNSEnabled = true
-			fmt.Println("  📡 mDNS service detected (use detailed flag for comprehensive scan)")
+			out.Info("📡 mDNS service detected (use detailed flag for comprehensive scan)")
 
 			router.Issues = append(router.Issues, common.SecurityIssue{
 				Severity:    common.SeverityLow,
@@ -126,7 +131,7 @@ func checkMDNS(router *common.RouterInfo, cfg MDNSConfig) {
 				Details:     "mDNS can expose device information to the local network. Use detailed flag for comprehensive discovery.",
 			})
 		} else {
-			fmt.Println("  ✅ No mDNS service detected")
+			out.Success("No mDNS service detected")
 		}
 	}
 }

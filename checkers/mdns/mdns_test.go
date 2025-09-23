@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/output"
 )
 
 func TestSendMDNSQuery(t *testing.T) {
@@ -260,7 +261,8 @@ func TestCheckMDNS_BasicMode(t *testing.T) {
 		router := &common.RouterInfo{}
 		cfg := MDNSConfig{Detailed: false}
 
-		checkMDNS(router, cfg)
+		out := output.NewNoOpOutput()
+		checkMDNS(router, cfg, out)
 
 		if router.MDNSEnabled {
 			if len(router.Issues) == 0 {
@@ -438,7 +440,8 @@ func TestCheckMDNS_DetailedMode(t *testing.T) {
 		router := &common.RouterInfo{}
 		cfg := MDNSConfig{Detailed: true}
 
-		checkMDNS(router, cfg)
+		out := output.NewNoOpOutput()
+		checkMDNS(router, cfg, out)
 
 		if router.MDNSEnabled {
 			if len(router.Issues) == 0 {

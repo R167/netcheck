@@ -1,12 +1,11 @@
 package starlink
 
 import (
-	"fmt"
-
 	starlinklib "github.com/R167/netcheck/starlink"
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type StarlinkChecker struct{}
@@ -41,11 +40,15 @@ func (c *StarlinkChecker) DefaultEnabled() bool {
 	return false
 }
 
-func (c *StarlinkChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
-	checkStarlink(router)
+func (c *StarlinkChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{checker.DependencyNetwork, checker.DependencyRouterInfo}
 }
 
-func (c *StarlinkChecker) RunStandalone(config checker.CheckerConfig) {
+func (c *StarlinkChecker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
+	checkStarlink(router, out)
+}
+
+func (c *StarlinkChecker) RunStandalone(config checker.CheckerConfig, out output.Output) {
 	// Router-based checker - no standalone functionality
 }
 
@@ -66,20 +69,20 @@ func (c *StarlinkChecker) MCPToolDefinition() *checker.MCPTool {
 	}
 }
 
-func checkStarlink(router *common.RouterInfo) {
-	fmt.Println("🛰️  Checking for Starlink Dishy...")
+func checkStarlink(router *common.RouterInfo, out output.Output) {
+	out.Section("🛰️", "Checking for Starlink Dishy...")
 	starlinkInfo := starlinklib.CheckStarlink()
 	router.Starlink = starlinkInfo
 
 	if starlinkInfo.Accessible {
-		fmt.Println("  📡 Starlink Dishy detected and accessible")
+		out.Info("📡 Starlink Dishy detected and accessible")
 		if starlinkInfo.DeviceInfo != nil {
-			fmt.Printf("  🔧 Hardware: %s\n", starlinkInfo.DeviceInfo.HardwareVersion)
-			fmt.Printf("  💾 Software: %s\n", starlinkInfo.DeviceInfo.SoftwareVersion)
+			out.Info("🔧 Hardware: %s", starlinkInfo.DeviceInfo.HardwareVersion)
+			out.Info("💾 Software: %s", starlinkInfo.DeviceInfo.SoftwareVersion)
 		}
 
 		if len(starlinkInfo.SecurityIssues) > 0 {
-			fmt.Printf("  ⚠️  Found %d security issue(s)\n", len(starlinkInfo.SecurityIssues))
+			out.Warning("Found %d security issue(s)", len(starlinkInfo.SecurityIssues))
 			// Add Starlink security issues to router issues with proper format conversion
 			for _, issue := range starlinkInfo.SecurityIssues {
 				router.Issues = append(router.Issues, common.SecurityIssue{
@@ -89,9 +92,9 @@ func checkStarlink(router *common.RouterInfo) {
 				})
 			}
 		} else {
-			fmt.Println("  ✅ No security issues detected")
+			out.Success("No security issues detected")
 		}
 	} else {
-		fmt.Println("  ℹ️  No Starlink Dishy detected")
+		out.Info("ℹ️  No Starlink Dishy detected")
 	}
 }

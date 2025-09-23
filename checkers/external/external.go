@@ -13,6 +13,7 @@ import (
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type ExternalChecker struct{}
@@ -85,13 +86,17 @@ func (c *ExternalChecker) DefaultEnabled() bool {
 	return true
 }
 
-func (c *ExternalChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+func (c *ExternalChecker) Dependencies() []checker.Dependency {
+	return []checker.Dependency{}
+}
+
+func (c *ExternalChecker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
 	// Standalone checker - no router-based functionality
 }
 
-func (c *ExternalChecker) RunStandalone(config checker.CheckerConfig) {
+func (c *ExternalChecker) RunStandalone(config checker.CheckerConfig, out output.Output) {
 	cfg := config.(ExternalConfig)
-	checkExternal(cfg)
+	checkExternal(cfg, out)
 }
 
 func (c *ExternalChecker) MCPToolDefinition() *checker.MCPTool {
@@ -112,7 +117,7 @@ func (c *ExternalChecker) MCPToolDefinition() *checker.MCPTool {
 	}
 }
 
-func checkExternal(cfg ExternalConfig) {
+func checkExternal(cfg ExternalConfig, out output.Output) {
 	fmt.Println("🌍 External Address Discovery")
 	fmt.Println("============================")
 
