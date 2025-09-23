@@ -11,7 +11,8 @@ on:
 
 jobs:
 
-  test:
+  fmt-and-vet:
+    name: Format and Vet
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -36,8 +37,30 @@ jobs:
     - name: Run go vet
       run: go vet ./...
 
-    - name: Run tests
-      run: go test -v ./...
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
 
     - name: Build
       run: go build -v ./...
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+
+    - name: Run tests
+      run: go test -v ./...
