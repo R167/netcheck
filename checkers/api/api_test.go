@@ -309,6 +309,9 @@ func TestAPIChecker_Interface(t *testing.T) {
 
 func TestAPICheckerHTTPErrors(t *testing.T) {
 	t.Run("Server connection failures", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("Skipping slow timeout test in short mode")
+		}
 		router := &common.RouterInfo{
 			IP: "192.0.2.1",
 		}
