@@ -2,13 +2,7 @@ package starlink
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
-	"net"
-	"os/exec"
-	"strconv"
-	"strings"
 	"time"
 )
 
@@ -40,30 +34,38 @@ func CheckStarlink() *StarLinkInfo {
 	}
 
 	var workingEndpoint string
+	var client *Client
+
 	for _, endpoint := range endpoints {
-		if isStarlinkAccessible(endpoint) {
-			workingEndpoint = endpoint
-			info.Accessible = true
-			break
+		if c, err := NewClient(endpoint); err == nil {
+			// Test the connection by trying to get device info
+			if c.IsAccessible() {
+				workingEndpoint = endpoint
+				client = c
+				info.Accessible = true
+				break
+			}
+			c.Close()
 		}
 	}
 
-	if !info.Accessible {
+	if !info.Accessible || client == nil {
 		return info
 	}
+	defer client.Close()
 
 	// Gather device information
-	if deviceInfo := getDeviceInfo(workingEndpoint); deviceInfo != nil {
+	if deviceInfo, err := client.GetDeviceInfo(); err == nil {
 		info.DeviceInfo = deviceInfo
 	}
 
 	// Gather status information
-	if status := getStatus(workingEndpoint); status != nil {
+	if status, err := client.GetStatus(); err == nil {
 		info.Status = status
 	}
 
 	// Gather configuration
-	if config := getConfig(workingEndpoint); config != nil {
+	if config, err := client.GetConfig(); err == nil {
 		info.Config = config
 	}
 
@@ -71,151 +73,6 @@ func CheckStarlink() *StarLinkInfo {
 	info.SecurityIssues = assessSecurity(info, workingEndpoint)
 
 	return info
-}
-
-// isStarlinkAccessible checks if a Starlink gRPC service is accessible at the given endpoint
-func isStarlinkAccessible(endpoint string) bool {
-	// Try to establish a connection to the endpoint
-	conn, err := net.DialTimeout("tcp", endpoint, DialTimeout)
-	if err != nil {
-		return false
-	}
-	conn.Close()
-
-	// Try a basic gRPC call to verify it's actually Starlink
-	cmd := exec.Command("grpcurl", "-plaintext", "-max-time", "5",
-		"-d", `{"get_device_info":{}}`,
-		endpoint, "SpaceX.API.Device.Device/Handle")
-
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
-	defer cancel()
-	cmd = exec.CommandContext(ctx, cmd.Args[0], cmd.Args[1:]...)
-
-	output, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-
-	// Check if the response looks like a Starlink response
-	return strings.Contains(string(output), "deviceInfo") || strings.Contains(string(output), "apiVersion")
-}
-
-// getDeviceInfo retrieves device information from Starlink
-func getDeviceInfo(endpoint string) *DeviceInfo {
-	cmd := exec.Command("grpcurl", "-plaintext", "-max-time", "5",
-		"-d", `{"get_device_info":{}}`,
-		endpoint, "SpaceX.API.Device.Device/Handle")
-
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
-	defer cancel()
-	cmd = exec.CommandContext(ctx, cmd.Args[0], cmd.Args[1:]...)
-
-	output, err := cmd.Output()
-	if err != nil {
-		return nil
-	}
-
-	var resp GRPCResponse
-	if err := json.Unmarshal(output, &resp); err != nil {
-		return nil
-	}
-
-	if resp.GetDeviceInfo == nil {
-		return nil
-	}
-
-	return &DeviceInfo{
-		ID:              resp.GetDeviceInfo.DeviceInfo.ID,
-		HardwareVersion: resp.GetDeviceInfo.DeviceInfo.HardwareVersion,
-		SoftwareVersion: resp.GetDeviceInfo.DeviceInfo.SoftwareVersion,
-		CountryCode:     resp.GetDeviceInfo.DeviceInfo.CountryCode,
-		BootCount:       resp.GetDeviceInfo.DeviceInfo.BootCount,
-		BuildID:         resp.GetDeviceInfo.DeviceInfo.BuildID,
-	}
-}
-
-// getStatus retrieves operational status from Starlink
-func getStatus(endpoint string) *DishStatus {
-	cmd := exec.Command("grpcurl", "-plaintext", "-max-time", "5",
-		"-d", `{"get_status":{}}`,
-		endpoint, "SpaceX.API.Device.Device/Handle")
-
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
-	defer cancel()
-	cmd = exec.CommandContext(ctx, cmd.Args[0], cmd.Args[1:]...)
-
-	output, err := cmd.Output()
-	if err != nil {
-		return nil
-	}
-
-	var resp GRPCResponse
-	if err := json.Unmarshal(output, &resp); err != nil {
-		return nil
-	}
-
-	if resp.DishGetStatus == nil {
-		return nil
-	}
-
-	status := resp.DishGetStatus
-
-	// Parse uptime from string to int64
-	uptimeS, _ := strconv.ParseInt(status.DeviceState.UptimeS, 10, 64)
-
-	return &DishStatus{
-		UptimeS:               uptimeS,
-		DownlinkThroughputBps: status.DownlinkThroughputBps,
-		UplinkThroughputBps:   status.UplinkThroughputBps,
-		PopPingLatencyMs:      status.PopPingLatencyMs,
-		BoresightAzimuthDeg:   status.BoresightAzimuthDeg,
-		BoresightElevationDeg: status.BoresightElevationDeg,
-		EthSpeedMbps:          status.EthSpeedMbps,
-		ConnectedRouters:      status.ConnectedRouters,
-		HasActuators:          status.HasActuators,
-		DisablementCode:       status.DisablementCode,
-		SoftwareUpdateState:   status.SoftwareUpdateState,
-	}
-}
-
-// getConfig retrieves configuration from Starlink
-func getConfig(endpoint string) *DishConfig {
-	cmd := exec.Command("grpcurl", "-plaintext", "-max-time", "5",
-		"-d", `{"dish_get_config":{}}`,
-		endpoint, "SpaceX.API.Device.Device/Handle")
-
-	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
-	defer cancel()
-	cmd = exec.CommandContext(ctx, cmd.Args[0], cmd.Args[1:]...)
-
-	output, err := cmd.Output()
-	if err != nil {
-		return nil
-	}
-
-	var resp GRPCResponse
-	if err := json.Unmarshal(output, &resp); err != nil {
-		return nil
-	}
-
-	if resp.DishGetConfig == nil {
-		return nil
-	}
-
-	config := resp.DishGetConfig.DishConfig
-
-	return &DishConfig{
-		SwupdateRebootHour:                   config.SwupdateRebootHour,
-		ApplySnowMeltMode:                    config.ApplySnowMeltMode,
-		ApplyLocationRequestMode:             config.ApplyLocationRequestMode,
-		ApplyLevelDishMode:                   config.ApplyLevelDishMode,
-		ApplyPowerSaveStartMinutes:           config.ApplyPowerSaveStartMinutes,
-		ApplyPowerSaveDurationMinutes:        config.ApplyPowerSaveDurationMinutes,
-		ApplyPowerSaveMode:                   config.ApplyPowerSaveMode,
-		ApplySwupdateThreeDayDeferralEnabled: config.ApplySwupdateThreeDayDeferralEnabled,
-		ApplyAssetClass:                      config.ApplyAssetClass,
-		ApplySwupdateRebootHour:              config.ApplySwupdateRebootHour,
-	}
 }
 
 // FormatStarlinkReport generates a human-readable report of Starlink findings
