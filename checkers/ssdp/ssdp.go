@@ -118,17 +118,16 @@ func discoverSSDPServices(router *common.RouterInfo, cfg SSDPConfig) {
 		router.SSDPEnabled = true
 		router.SSDPServices = allServices
 
-		categorized := categorizeServices(allServices)
+		// Deduplicate services by USN to avoid showing the same device multiple times
+		deduplicatedServices := deduplicateServices(allServices)
+		categorized := categorizeServices(deduplicatedServices)
 
-		fmt.Printf("  📊 Found %d SSDP service(s)\n", len(allServices))
+		fmt.Printf("  📊 Found %d unique SSDP device(s) (%d total responses)\n", len(deduplicatedServices), len(allServices))
+
 		for category, services := range categorized {
 			fmt.Printf("\n  %s (%d):\n", category, len(services))
 			for _, svc := range services {
-				if svc.FriendlyName != "" {
-					fmt.Printf("    • %s (%s)\n", svc.FriendlyName, svc.ModelName)
-				} else {
-					fmt.Printf("    • %s\n", svc.DeviceType)
-				}
+				displayServiceDetails(svc)
 			}
 		}
 
@@ -305,6 +304,86 @@ func categorizeService(svc common.SSDPService) string {
 	}
 
 	return "📦 Other Devices"
+}
+
+func deduplicateServices(services []common.SSDPService) []common.SSDPService {
+	// Group by device (Location + FriendlyName) rather than individual services
+	deviceMap := make(map[string]common.SSDPService)
+
+	for _, svc := range services {
+		// Create a device key based on location and friendly name
+		deviceKey := ""
+		if svc.Location != "" && svc.FriendlyName != "" {
+			deviceKey = svc.Location + "::" + svc.FriendlyName
+		} else if svc.Location != "" {
+			deviceKey = svc.Location
+		} else if svc.USN != "" {
+			deviceKey = svc.USN
+		} else {
+			continue // Skip services without meaningful identifiers
+		}
+
+		// Keep the first occurrence of each device, preferring root devices
+		if _, exists := deviceMap[deviceKey]; !exists {
+			deviceMap[deviceKey] = svc
+		} else {
+			// Prefer root devices or more descriptive device types
+			if strings.Contains(svc.DeviceType, "rootdevice") ||
+			   strings.Contains(svc.DeviceType, "InternetGatewayDevice") ||
+			   strings.Contains(svc.DeviceType, "NAS") {
+				deviceMap[deviceKey] = svc
+			}
+		}
+	}
+
+	// Convert map back to slice
+	var deduplicated []common.SSDPService
+	for _, svc := range deviceMap {
+		deduplicated = append(deduplicated, svc)
+	}
+
+	return deduplicated
+}
+
+func displayServiceDetails(svc common.SSDPService) {
+	// Main device info
+	if svc.FriendlyName != "" {
+		fmt.Printf("    • %s", svc.FriendlyName)
+		if svc.ModelName != "" && svc.ModelName != svc.FriendlyName {
+			fmt.Printf(" (%s)", svc.ModelName)
+		}
+	} else if svc.ModelName != "" {
+		fmt.Printf("    • %s", svc.ModelName)
+	} else {
+		fmt.Printf("    • %s", svc.DeviceType)
+	}
+
+	// Add manufacturer if available and different from friendly name
+	if svc.Manufacturer != "" && !strings.Contains(strings.ToLower(svc.FriendlyName), strings.ToLower(svc.Manufacturer)) {
+		fmt.Printf(" [%s]", svc.Manufacturer)
+	}
+	fmt.Println()
+
+	// Location URL (important for security assessment)
+	if svc.Location != "" {
+		fmt.Printf("      🔗 %s\n", svc.Location)
+	}
+
+	// Server information (reveals software versions)
+	if svc.Server != "" {
+		fmt.Printf("      🖥️  Server: %s\n", svc.Server)
+	}
+
+	// Device type for technical details
+	if svc.DeviceType != "" && svc.DeviceType != "upnp:rootdevice" && svc.DeviceType != "ssdp:all" {
+		fmt.Printf("      📋 Type: %s\n", svc.DeviceType)
+	}
+
+	// IP version
+	if svc.IPVersion != "" {
+		fmt.Printf("      🌐 %s\n", svc.IPVersion)
+	}
+	fmt.Println()
 }
 
 func assessSecurityRisks(router *common.RouterInfo, categorized map[string][]common.SSDPService) {
