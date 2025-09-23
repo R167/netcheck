@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/output"
 )
 
 func TestParseSSDPResponse(t *testing.T) {
@@ -249,7 +250,8 @@ func TestEnumerateUPnPServices(t *testing.T) {
 	defer server.Close()
 
 	router := &common.RouterInfo{}
-	enumerateUPnPServices(router, server.URL)
+	out := output.NewNoOpOutput()
+	enumerateUPnPServices(router, server.URL, out)
 
 	if len(router.UPnPServices) != 3 {
 		t.Errorf("Expected 3 services, got %d", len(router.UPnPServices))

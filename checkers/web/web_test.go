@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/output"
 )
 
 func TestDetectVendor(t *testing.T) {
@@ -60,7 +61,8 @@ func TestDetectVendor(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := &common.RouterInfo{}
-			detectVendor(router, tt.content)
+			out := output.NewNoOpOutput()
+			detectVendor(router, tt.content, out)
 			if router.Vendor != tt.want {
 				t.Errorf("detectVendor() vendor = %v, want %v", router.Vendor, tt.want)
 			}
@@ -104,7 +106,8 @@ func TestCheckDefaultPage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := &common.RouterInfo{}
-			checkDefaultPage(router, tt.content, "http://192.168.1.1")
+			out := output.NewNoOpOutput()
+			checkDefaultPage(router, tt.content, "http://192.168.1.1", out)
 
 			hasIssue := len(router.Issues) > 0
 			if hasIssue != tt.expectIssue {
@@ -199,7 +202,8 @@ func TestCheckDefaultCredentials(t *testing.T) {
 			Vendor: "linksys",
 		}
 
-		checkDefaultCredentials(router, server.URL)
+		out := output.NewNoOpOutput()
+		checkDefaultCredentials(router, server.URL, out)
 
 		if !router.DefaultCreds {
 			t.Error("Expected DefaultCreds to be true")
@@ -225,7 +229,8 @@ func TestCheckDefaultCredentials(t *testing.T) {
 			Vendor: "",
 		}
 
-		checkDefaultCredentials(router, server.URL)
+		out := output.NewNoOpOutput()
+		checkDefaultCredentials(router, server.URL, out)
 
 		if router.DefaultCreds {
 			t.Error("Expected DefaultCreds to be false for unknown vendor")
@@ -242,7 +247,8 @@ func TestCheckDefaultCredentials(t *testing.T) {
 			Vendor: "netgear",
 		}
 
-		checkDefaultCredentials(router, server.URL)
+		out := output.NewNoOpOutput()
+		checkDefaultCredentials(router, server.URL, out)
 
 		if router.DefaultCreds {
 			t.Error("Expected DefaultCreds to be false when no creds work")
@@ -284,7 +290,8 @@ func TestCheckWebInterface_Integration(t *testing.T) {
 		}
 
 		cfg := WebConfig{CheckDefaultCreds: true}
-		checkWebInterface(router, cfg)
+		out := output.NewNoOpOutput()
+		checkWebInterface(router, cfg, out)
 
 		if !router.WebInterface {
 			t.Error("Expected WebInterface to be true")
@@ -418,7 +425,8 @@ func BenchmarkDetectVendor(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		detectVendor(router, content)
+		out := output.NewNoOpOutput()
+		detectVendor(router, content, out)
 	}
 }
 
@@ -429,6 +437,7 @@ func BenchmarkCheckDefaultPage(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		router.Issues = nil
-		checkDefaultPage(router, content, "http://192.168.1.1")
+		out := output.NewNoOpOutput()
+		checkDefaultPage(router, content, "http://192.168.1.1", out)
 	}
 }
