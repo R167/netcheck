@@ -118,18 +118,32 @@ func discoverSSDPServices(router *common.RouterInfo, cfg SSDPConfig) {
 		router.SSDPEnabled = true
 		router.SSDPServices = allServices
 
-		// Deduplicate services by USN to avoid showing the same device multiple times
-		deduplicatedServices := deduplicateServices(allServices)
-		categorized := categorizeServices(deduplicatedServices)
+		// Group services by device to show all services per device
+		deviceGroups := groupServicesByDevice(allServices)
+		totalDevices := len(deviceGroups)
 
-		fmt.Printf("  📊 Found %d unique SSDP device(s) (%d total responses)\n", len(deduplicatedServices), len(allServices))
+		fmt.Printf("  📊 Found %d unique device(s) with %d total services\n", totalDevices, len(allServices))
 
-		for category, services := range categorized {
-			fmt.Printf("\n  %s (%d):\n", category, len(services))
-			for _, svc := range services {
-				displayServiceDetails(svc)
+		// Categorize devices for display
+		categorizedDevices := make(map[string][]DeviceGroup)
+		for _, group := range deviceGroups {
+			category := categorizeService(group.MainService)
+			categorizedDevices[category] = append(categorizedDevices[category], group)
+		}
+
+		for category, groups := range categorizedDevices {
+			fmt.Printf("\n  %s (%d):\n", category, len(groups))
+			for _, group := range groups {
+				displayDeviceGroup(group)
 			}
 		}
+
+		// Update router with deduplicated services for security assessment
+		var uniqueServices []common.SSDPService
+		for _, group := range deviceGroups {
+			uniqueServices = append(uniqueServices, group.MainService)
+		}
+		categorized := categorizeServices(uniqueServices)
 
 		assessSecurityRisks(router, categorized)
 	} else {
@@ -306,9 +320,14 @@ func categorizeService(svc common.SSDPService) string {
 	return "📦 Other Devices"
 }
 
-func deduplicateServices(services []common.SSDPService) []common.SSDPService {
-	// Group by device (Location + FriendlyName) rather than individual services
-	deviceMap := make(map[string]common.SSDPService)
+type DeviceGroup struct {
+	MainService common.SSDPService
+	AllServices []common.SSDPService
+}
+
+func groupServicesByDevice(services []common.SSDPService) []DeviceGroup {
+	// Group services by device location and friendly name
+	deviceMap := make(map[string]*DeviceGroup)
 
 	for _, svc := range services {
 		// Create a device key based on location and friendly name
@@ -323,29 +342,36 @@ func deduplicateServices(services []common.SSDPService) []common.SSDPService {
 			continue // Skip services without meaningful identifiers
 		}
 
-		// Keep the first occurrence of each device, preferring root devices
-		if _, exists := deviceMap[deviceKey]; !exists {
-			deviceMap[deviceKey] = svc
-		} else {
-			// Prefer root devices or more descriptive device types
+		if group, exists := deviceMap[deviceKey]; exists {
+			// Add service to existing device group
+			group.AllServices = append(group.AllServices, svc)
+			// Update main service if this one is more descriptive
 			if strings.Contains(svc.DeviceType, "rootdevice") ||
 			   strings.Contains(svc.DeviceType, "InternetGatewayDevice") ||
 			   strings.Contains(svc.DeviceType, "NAS") {
-				deviceMap[deviceKey] = svc
+				group.MainService = svc
+			}
+		} else {
+			// Create new device group
+			deviceMap[deviceKey] = &DeviceGroup{
+				MainService: svc,
+				AllServices: []common.SSDPService{svc},
 			}
 		}
 	}
 
-	// Convert map back to slice
-	var deduplicated []common.SSDPService
-	for _, svc := range deviceMap {
-		deduplicated = append(deduplicated, svc)
+	// Convert map to slice
+	var groups []DeviceGroup
+	for _, group := range deviceMap {
+		groups = append(groups, *group)
 	}
 
-	return deduplicated
+	return groups
 }
 
-func displayServiceDetails(svc common.SSDPService) {
+func displayDeviceGroup(group DeviceGroup) {
+	svc := group.MainService
+
 	// Main device info
 	if svc.FriendlyName != "" {
 		fmt.Printf("    • %s", svc.FriendlyName)
@@ -374,9 +400,26 @@ func displayServiceDetails(svc common.SSDPService) {
 		fmt.Printf("      🖥️  Server: %s\n", svc.Server)
 	}
 
-	// Device type for technical details
-	if svc.DeviceType != "" && svc.DeviceType != "upnp:rootdevice" && svc.DeviceType != "ssdp:all" {
-		fmt.Printf("      📋 Type: %s\n", svc.DeviceType)
+	// Show all services this device offers
+	if len(group.AllServices) > 1 {
+		fmt.Printf("      📱 Services (%d):\n", len(group.AllServices))
+		for _, serviceSvc := range group.AllServices {
+			if serviceSvc.DeviceType != "" && serviceSvc.DeviceType != "upnp:rootdevice" && serviceSvc.DeviceType != "ssdp:all" {
+				// Clean up service type for display
+				serviceType := serviceSvc.DeviceType
+				if strings.Contains(serviceType, "urn:schemas-upnp-org:service:") {
+					serviceType = strings.ReplaceAll(serviceType, "urn:schemas-upnp-org:service:", "")
+					serviceType = strings.ReplaceAll(serviceType, ":1", "")
+					serviceType = strings.ReplaceAll(serviceType, ":2", "")
+				}
+				if strings.Contains(serviceType, "urn:schemas-upnp-org:device:") {
+					serviceType = strings.ReplaceAll(serviceType, "urn:schemas-upnp-org:device:", "")
+					serviceType = strings.ReplaceAll(serviceType, ":1", "")
+					serviceType = strings.ReplaceAll(serviceType, ":2", "")
+				}
+				fmt.Printf("        - %s\n", serviceType)
+			}
+		}
 	}
 
 	// IP version
