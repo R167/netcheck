@@ -474,126 +474,116 @@ func enumerateUPnPServices(router *common.RouterInfo, baseURL string) {
 func checkIPv6FirewallControl(router *common.RouterInfo, baseURL string) {
 	fmt.Println("\n  🛡️  Checking IPv6 Firewall Control...")
 
-	hasIPv6Firewall := false
+	// Find the IPv6 firewall control service
+	var ipv6Service *common.UPnPService
 	for _, svc := range router.UPnPServices {
 		if strings.Contains(svc.ServiceType, "WANIPv6FirewallControl") {
-			hasIPv6Firewall = true
+			ipv6Service = &svc
 			break
 		}
 	}
 
-	if !hasIPv6Firewall {
+	if ipv6Service == nil {
 		fmt.Println("    ℹ️  IPv6 Firewall Control not available")
 		return
 	}
 
 	fmt.Println("    📡 IPv6 Firewall Control service detected")
 
+	// Extract base URL for SOAP requests
 	parts := strings.Split(baseURL, "/")
 	if len(parts) < 4 {
 		return
 	}
 	soapBaseURL := strings.Join(parts[:3], "/")
 
-	pinholes := getIPv6Pinholes(soapBaseURL)
-	if len(pinholes) > 0 {
-		router.IPv6Pinholes = pinholes
-		fmt.Printf("    🔓 Found %d IPv6 pinhole(s)\n", len(pinholes))
+	// Get firewall status using the correct control URL
+	status := getIPv6FirewallStatus(soapBaseURL, ipv6Service.ControlURL)
+	if status != nil {
+		fmt.Printf("    🔥 Firewall Enabled: %t\n", status.FirewallEnabled)
+		fmt.Printf("    🔓 Inbound Pinholes Allowed: %t\n", status.InboundPinholeAllowed)
 
-		for _, pinhole := range pinholes {
-			fmt.Printf("      %s:%d → %s:%d (%s)\n",
-				pinhole.RemoteHost, pinhole.RemotePort,
-				pinhole.InternalHost, pinhole.InternalPort,
-				pinhole.Protocol)
+		// Note: IPv6 firewall control service doesn't provide pinhole enumeration
+		// Unlike IPv4 port mappings, there's no standard way to list all pinholes
+		fmt.Println("    ℹ️  IPv6 pinhole enumeration not supported by UPnP standard")
+
+		// If pinholes are allowed but firewall is enabled, it's a potential security concern
+		if status.InboundPinholeAllowed {
+			router.Issues = append(router.Issues, common.SecurityIssue{
+				Severity:    "MEDIUM",
+				Description: "IPv6 inbound pinholes are allowed",
+				Details:     "The router allows creation of IPv6 firewall pinholes, which could expose internal services. Monitor for unauthorized pinhole creation.",
+			})
 		}
 
-		router.Issues = append(router.Issues, common.SecurityIssue{
-			Severity:    "HIGH",
-			Description: "Active IPv6 firewall pinholes detected",
-			Details:     fmt.Sprintf("Found %d IPv6 firewall pinholes that may expose internal services to the internet", len(pinholes)),
-		})
+		if !status.FirewallEnabled {
+			router.Issues = append(router.Issues, common.SecurityIssue{
+				Severity:    "HIGH",
+				Description: "IPv6 firewall is disabled",
+				Details:     "IPv6 firewall protection is disabled, potentially exposing internal services to the internet.",
+			})
+		} else {
+			fmt.Println("    ✓ IPv6 firewall is properly enabled")
+		}
 	} else {
-		fmt.Println("    ✓ No IPv6 pinholes found")
+		fmt.Println("    ⚠️  Could not retrieve IPv6 firewall status")
 	}
 }
 
-func getIPv6Pinholes(baseURL string) []common.IPv6Pinhole {
-	client := &http.Client{Timeout: 5 * time.Second}
-	var pinholes []common.IPv6Pinhole
+type IPv6FirewallStatus struct {
+	FirewallEnabled        bool
+	InboundPinholeAllowed bool
+}
 
-	for i := 0; i < 20; i++ {
-		soapBody := fmt.Sprintf(`<?xml version="1.0"?>
+func getIPv6FirewallStatus(baseURL, controlURL string) *IPv6FirewallStatus {
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	soapBody := `<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
 <s:Body>
-<u:GetPinholeEntry xmlns:u="urn:schemas-upnp-org:service:WANIPv6FirewallControl:1">
-<UniqueID>%d</UniqueID>
-</u:GetPinholeEntry>
+<u:GetFirewallStatus xmlns:u="urn:schemas-upnp-org:service:WANIPv6FirewallControl:1">
+</u:GetFirewallStatus>
 </s:Body>
-</s:Envelope>`, i)
+</s:Envelope>`
 
-		req, err := http.NewRequest("POST", baseURL+"/ctl/IPv6FC", strings.NewReader(soapBody))
-		if err != nil {
-			break
-		}
-
-		req.Header.Set("Content-Type", "text/xml; charset=utf-8")
-		req.Header.Set("SOAPAction", `"urn:schemas-upnp-org:service:WANIPv6FirewallControl:1#GetPinholeEntry"`)
-
-		resp, err := client.Do(req)
-		if err != nil || resp.StatusCode != 200 {
-			break
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			break
-		}
-
-		content := string(body)
-		if strings.Contains(content, "RemoteHost") {
-			pinhole := parseIPv6Pinhole(content)
-			if pinhole.InternalPort > 0 {
-				pinholes = append(pinholes, pinhole)
-			}
-		} else {
-			break
-		}
+	req, err := http.NewRequest("POST", baseURL+controlURL, strings.NewReader(soapBody))
+	if err != nil {
+		return nil
 	}
 
-	return pinholes
+	req.Header.Set("Content-Type", "text/xml; charset=utf-8")
+	req.Header.Set("SOAPAction", `"urn:schemas-upnp-org:service:WANIPv6FirewallControl:1#GetFirewallStatus"`)
+
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+
+	content := string(body)
+	status := &IPv6FirewallStatus{}
+
+	// Parse FirewallEnabled
+	if match := regexp.MustCompile(`<FirewallEnabled>(\d+)</FirewallEnabled>`).FindStringSubmatch(content); len(match) > 1 {
+		status.FirewallEnabled = match[1] == "1"
+	}
+
+	// Parse InboundPinholeAllowed
+	if match := regexp.MustCompile(`<InboundPinholeAllowed>(\d+)</InboundPinholeAllowed>`).FindStringSubmatch(content); len(match) > 1 {
+		status.InboundPinholeAllowed = match[1] == "1"
+	}
+
+	return status
 }
 
-func parseIPv6Pinhole(soapResponse string) common.IPv6Pinhole {
-	pinhole := common.IPv6Pinhole{}
-
-	if match := regexp.MustCompile(`<RemoteHost>([^<]+)</RemoteHost>`).FindStringSubmatch(soapResponse); len(match) > 1 {
-		pinhole.RemoteHost = match[1]
-	}
-	if match := regexp.MustCompile(`<RemotePort>(\d+)</RemotePort>`).FindStringSubmatch(soapResponse); len(match) > 1 {
-		if port, err := strconv.Atoi(match[1]); err == nil {
-			pinhole.RemotePort = port
-		}
-	}
-	if match := regexp.MustCompile(`<InternalClient>([^<]+)</InternalClient>`).FindStringSubmatch(soapResponse); len(match) > 1 {
-		pinhole.InternalHost = match[1]
-	}
-	if match := regexp.MustCompile(`<InternalPort>(\d+)</InternalPort>`).FindStringSubmatch(soapResponse); len(match) > 1 {
-		if port, err := strconv.Atoi(match[1]); err == nil {
-			pinhole.InternalPort = port
-		}
-	}
-	if match := regexp.MustCompile(`<Protocol>(\d+)</Protocol>`).FindStringSubmatch(soapResponse); len(match) > 1 {
-		pinhole.Protocol = match[1]
-	}
-	if match := regexp.MustCompile(`<LeaseTime>(\d+)</LeaseTime>`).FindStringSubmatch(soapResponse); len(match) > 1 {
-		if lease, err := strconv.Atoi(match[1]); err == nil {
-			pinhole.LeaseTime = lease
-		}
-	}
-
-	return pinhole
-}
+// Note: parseIPv6Pinhole function removed as IPv6 firewall control
+// does not provide a standard method to enumerate existing pinholes.
+// Individual pinholes can only be checked if their UniqueID is known.
 
 func checkUPnPSecurityIssues(router *common.RouterInfo, baseURL string) {
 	fmt.Println("\n  🔒 Checking UPnP security issues...")
