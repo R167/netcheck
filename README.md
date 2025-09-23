@@ -5,7 +5,7 @@ A comprehensive network gateway security assessment tool for identifying vulnera
 ## Features
 
 - **Gateway Discovery**: Automatically detects your network gateway
-- **Service Detection**: Identifies UPnP, NAT-PMP, mDNS, and other network services
+- **Service Detection**: Identifies UPnP, NAT-PMP, mDNS, SSDP, and other network services
 - **Security Analysis**: Tests for default credentials, exposed services, and misconfigurations
 - **Port Mapping Enumeration**: Discovers active UPnP port forwards
 - **Device Fingerprinting**: Identifies router vendor, model, and serial numbers
@@ -23,6 +23,7 @@ A comprehensive network gateway security assessment tool for identifying vulnera
 | **IPv6 Analysis** | `--ipv6` | ✅ | Analyzes IPv6 configuration and connectivity |
 | **API Discovery** | `--api` | ✅ | Checks for exposed router APIs and CGI scripts |
 | **mDNS Discovery** | `--mdns` | 🔧 | Comprehensive mDNS/Bonjour service discovery |
+| **SSDP Discovery** | `--ssdp` | 🔧 | Discovers SSDP services (DLNA, IoT devices) |
 | **Starlink Detection** | `--starlink` | 🔧 | Specialized Starlink Dishy detection |
 | **Routing Info** | `--routes` | 🔧 | Displays routing table information |
 | **Device Info** | `--device` | 🔧 | Shows network interface and device information |
@@ -111,7 +112,7 @@ Issues Found: 3
 The tool performs comprehensive security analysis including:
 
 - **Default Credentials**: Tests vendor-specific default login combinations
-- **Service Discovery**: UPnP/SSDP, NAT-PMP, mDNS/Bonjour, IPv6 configuration
+- **Service Discovery**: UPnP, SSDP, NAT-PMP, mDNS/Bonjour, IPv6 configuration
 - **Port Scanning**: Common management ports (SSH, HTTP, HTTPS, SNMP, Telnet)
 - **API Enumeration**: Router APIs, CGI scripts, WPS configuration
 - **Device Fingerprinting**: Vendor, model, and serial number identification

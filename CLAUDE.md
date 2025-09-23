@@ -193,3 +193,5 @@ This project demonstrates effective use of Go for network security tools and sho
 - Always commit and push before changing branches
 - Never use the timeout command - it blocks command approval. Use Bash tool with background execution instead
 - Do not use `&` to background a bash prompt - use the dedicated tool parameter
+- Always use `go fmt` instead of `gofmt`
+- **Always run `go fmt ./...` after editing Go files** - this ensures consistent formatting and prevents CI failures

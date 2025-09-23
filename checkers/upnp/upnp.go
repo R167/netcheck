@@ -531,7 +531,7 @@ func checkIPv6FirewallControl(router *common.RouterInfo, baseURL string) {
 }
 
 type IPv6FirewallStatus struct {
-	FirewallEnabled        bool
+	FirewallEnabled       bool
 	InboundPinholeAllowed bool
 }
 

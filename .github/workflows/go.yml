@@ -11,7 +11,8 @@ on:
 
 jobs:
 
-  build:
+  fmt-and-vet:
+    name: Format and Vet
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -19,10 +20,47 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.25'
+        go-version: '1.25.1'
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Check formatting
+      run: |
+        go fmt ./...
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "Code is not formatted. Please run 'go fmt ./...'"
+          git diff
+          exit 1
+        fi
+
+    - name: Run go vet
+      run: go vet ./...
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.25.1'
 
     - name: Build
       run: go build -v ./...
 
-    - name: Test
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.25.1'
+
+    - name: Run tests
       run: go test -v ./...
