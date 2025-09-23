@@ -41,9 +41,11 @@ type RouterInfo struct {
 	NATpmpEnabled bool
 	IPv6Enabled   bool
 	MDNSEnabled   bool
+	SSDPEnabled   bool
 	PortMappings  []PortMapping
 	IPv6Pinholes  []IPv6Pinhole
 	UPnPServices  []UPnPService
+	SSDPServices  []SSDPService
 	MDNSServices  []MDNSService
 	Issues        []SecurityIssue
 	Starlink      interface{}
@@ -99,4 +101,16 @@ type UPnPService struct {
 	EventSubURL string
 	SCPDURL     string
 	IsStandard  bool
+}
+
+type SSDPService struct {
+	DeviceType   string
+	FriendlyName string
+	Manufacturer string
+	ModelName    string
+	Location     string
+	Server       string
+	USN          string
+	Category     string
+	IPVersion    string
 }

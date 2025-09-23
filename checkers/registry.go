@@ -11,6 +11,7 @@ import (
 	"github.com/R167/netcheck/checkers/natpmp"
 	"github.com/R167/netcheck/checkers/ports"
 	"github.com/R167/netcheck/checkers/routes"
+	"github.com/R167/netcheck/checkers/ssdp"
 	"github.com/R167/netcheck/checkers/starlink"
 	"github.com/R167/netcheck/checkers/upnp"
 	"github.com/R167/netcheck/checkers/web"
@@ -33,6 +34,7 @@ func AllCheckers() []checker.Checker {
 		natpmp.NewNATpmpChecker(),
 		ipv6.NewIPv6Checker(),
 		mdns.NewMDNSChecker(),
+		ssdp.NewSSDPChecker(),
 		api.NewAPIChecker(),
 		starlink.NewStarlinkChecker(),
 
