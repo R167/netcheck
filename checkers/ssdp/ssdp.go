@@ -347,8 +347,8 @@ func groupServicesByDevice(services []common.SSDPService) []DeviceGroup {
 			group.AllServices = append(group.AllServices, svc)
 			// Update main service if this one is more descriptive
 			if strings.Contains(svc.DeviceType, "rootdevice") ||
-			   strings.Contains(svc.DeviceType, "InternetGatewayDevice") ||
-			   strings.Contains(svc.DeviceType, "NAS") {
+				strings.Contains(svc.DeviceType, "InternetGatewayDevice") ||
+				strings.Contains(svc.DeviceType, "NAS") {
 				group.MainService = svc
 			}
 		} else {
