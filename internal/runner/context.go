@@ -7,6 +7,15 @@ import (
 	"github.com/R167/netcheck/checkers/common"
 )
 
+// RunContext carries shared resources and configuration for checker execution.
+// It provides a centralized place for resources that multiple checkers need,
+// avoiding redundant operations like gateway discovery.
+//
+// The context uses a builder pattern for easy construction:
+//
+//	ctx := NewRunContext(context.Background()).
+//	    WithGateway("192.168.1.1").
+//	    WithGlobalTimeout(60 * time.Second)
 type RunContext struct {
 	Ctx            context.Context
 	Gateway        string

@@ -31,14 +31,6 @@ const (
 	NATpmpTimeout = 3 * time.Second
 )
 
-// severityOrder defines the priority order for security issues
-var severityOrder = map[string]int{
-	SeverityCritical: 0,
-	SeverityHigh:     1,
-	SeverityMedium:   2,
-	SeverityLow:      3,
-}
-
 var (
 	// Test category flags
 	allFlag      = flag.Bool("all", false, "Run all available tests")
