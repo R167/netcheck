@@ -1,9 +1,9 @@
 package upnp
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -110,41 +110,44 @@ func TestParsePortMapping(t *testing.T) {
 	}
 }
 
-func TestParseIPv6Pinhole(t *testing.T) {
+func TestParseIPv6FirewallStatus(t *testing.T) {
 	soapResponse := `<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
 <s:Body>
-<u:GetPinholeEntryResponse xmlns:u="urn:schemas-upnp-org:service:WANIPv6FirewallControl:1">
-<RemoteHost>2001:db8::1</RemoteHost>
-<RemotePort>443</RemotePort>
-<InternalClient>fe80::1</InternalClient>
-<InternalPort>8443</InternalPort>
-<Protocol>6</Protocol>
-<LeaseTime>3600</LeaseTime>
-</u:GetPinholeEntryResponse>
+<u:GetFirewallStatusResponse xmlns:u="urn:schemas-upnp-org:service:WANIPv6FirewallControl:1">
+<FirewallEnabled>1</FirewallEnabled>
+<InboundPinholeAllowed>1</InboundPinholeAllowed>
+</u:GetFirewallStatusResponse>
 </s:Body>
 </s:Envelope>`
 
-	pinhole := parseIPv6Pinhole(soapResponse)
+	status := parseIPv6FirewallStatusResponse(soapResponse)
 
-	if pinhole.RemoteHost != "2001:db8::1" {
-		t.Errorf("RemoteHost = %s, want 2001:db8::1", pinhole.RemoteHost)
+	if status == nil {
+		t.Fatal("Expected status, got nil")
 	}
-	if pinhole.RemotePort != 443 {
-		t.Errorf("RemotePort = %d, want 443", pinhole.RemotePort)
+	if !status.FirewallEnabled {
+		t.Error("FirewallEnabled = false, want true")
 	}
-	if pinhole.InternalHost != "fe80::1" {
-		t.Errorf("InternalHost = %s, want fe80::1", pinhole.InternalHost)
+	if !status.InboundPinholeAllowed {
+		t.Error("InboundPinholeAllowed = false, want true")
 	}
-	if pinhole.InternalPort != 8443 {
-		t.Errorf("InternalPort = %d, want 8443", pinhole.InternalPort)
+}
+
+func parseIPv6FirewallStatusResponse(soapResponse string) *IPv6FirewallStatus {
+	status := &IPv6FirewallStatus{}
+
+	// Parse FirewallEnabled
+	if match := regexp.MustCompile(`<FirewallEnabled>(\d+)</FirewallEnabled>`).FindStringSubmatch(soapResponse); len(match) > 1 {
+		status.FirewallEnabled = match[1] == "1"
 	}
-	if pinhole.Protocol != "6" {
-		t.Errorf("Protocol = %s, want 6", pinhole.Protocol)
+
+	// Parse InboundPinholeAllowed
+	if match := regexp.MustCompile(`<InboundPinholeAllowed>(\d+)</InboundPinholeAllowed>`).FindStringSubmatch(soapResponse); len(match) > 1 {
+		status.InboundPinholeAllowed = match[1] == "1"
 	}
-	if pinhole.LeaseTime != 3600 {
-		t.Errorf("LeaseTime = %d, want 3600", pinhole.LeaseTime)
-	}
+
+	return status
 }
 
 func TestGetUPnPDescriptionFromURL(t *testing.T) {
@@ -327,50 +330,37 @@ func TestGetPortMappings_MockServer(t *testing.T) {
 	}
 }
 
-func TestGetIPv6Pinholes_MockServer(t *testing.T) {
-	callCount := 0
+func TestGetIPv6FirewallStatus_MockServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/ctl/IPv6FC" {
+		if r.URL.Path != "/ctl/IP6FCtl" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
-		if callCount < 2 {
-			response := fmt.Sprintf(`<?xml version="1.0"?>
+		response := `<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
 <s:Body>
-<u:GetPinholeEntryResponse>
-<RemoteHost>::</RemoteHost>
-<RemotePort>%d</RemotePort>
-<InternalClient>fe80::1</InternalClient>
-<InternalPort>%d</InternalPort>
-<Protocol>6</Protocol>
-<LeaseTime>3600</LeaseTime>
-</u:GetPinholeEntryResponse>
+<u:GetFirewallStatusResponse xmlns:u="urn:schemas-upnp-org:service:WANIPv6FirewallControl:1">
+<FirewallEnabled>1</FirewallEnabled>
+<InboundPinholeAllowed>0</InboundPinholeAllowed>
+</u:GetFirewallStatusResponse>
 </s:Body>
-</s:Envelope>`, 443+callCount, 8443+callCount)
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(response))
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-		callCount++
+</s:Envelope>`
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(response))
 	}))
 	defer server.Close()
 
-	pinholes := getIPv6Pinholes(server.URL)
+	status := getIPv6FirewallStatus(server.URL, "/ctl/IP6FCtl")
 
-	if len(pinholes) != 2 {
-		t.Errorf("Expected 2 pinholes, got %d", len(pinholes))
+	if status == nil {
+		t.Fatal("Expected status, got nil")
 	}
-
-	if len(pinholes) >= 2 {
-		if pinholes[0].RemotePort != 443 {
-			t.Errorf("First pinhole RemotePort = %d, want 443", pinholes[0].RemotePort)
-		}
-		if pinholes[1].RemotePort != 444 {
-			t.Errorf("Second pinhole RemotePort = %d, want 444", pinholes[1].RemotePort)
-		}
+	if !status.FirewallEnabled {
+		t.Error("FirewallEnabled = false, want true")
+	}
+	if status.InboundPinholeAllowed {
+		t.Error("InboundPinholeAllowed = true, want false")
 	}
 }
 
