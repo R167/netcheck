@@ -10,6 +10,7 @@ import (
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type WebChecker struct{}
@@ -170,12 +171,12 @@ func (c *WebChecker) Dependencies() []checker.Dependency {
 	return []checker.Dependency{checker.DependencyGateway, checker.DependencyRouterInfo}
 }
 
-func (c *WebChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+func (c *WebChecker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
 	cfg := config.(WebConfig)
-	checkWebInterface(router, cfg)
+	checkWebInterface(router, cfg, out)
 }
 
-func (c *WebChecker) RunStandalone(config checker.CheckerConfig) {
+func (c *WebChecker) RunStandalone(config checker.CheckerConfig, out output.Output) {
 }
 
 func (c *WebChecker) MCPToolDefinition() *checker.MCPTool {
@@ -200,8 +201,8 @@ func (c *WebChecker) MCPToolDefinition() *checker.MCPTool {
 	}
 }
 
-func checkWebInterface(router *common.RouterInfo, cfg WebConfig) {
-	fmt.Println("🔍 Checking web interface...")
+func checkWebInterface(router *common.RouterInfo, cfg WebConfig, out output.Output) {
+	out.Section("🔍", "Checking web interface...")
 
 	client := &http.Client{
 		Timeout: common.HTTPTimeout,
@@ -228,24 +229,24 @@ func checkWebInterface(router *common.RouterInfo, cfg WebConfig) {
 		}
 
 		content := string(body)
-		detectVendor(router, content)
-		checkDefaultPage(router, content, url)
+		detectVendor(router, content, out)
+		checkDefaultPage(router, content, url, out)
 		if cfg.CheckDefaultCreds {
-			checkDefaultCredentials(router, url)
+			checkDefaultCredentials(router, url, out)
 		}
 		break
 	}
 
 	if !router.WebInterface {
-		fmt.Println("  ℹ️  No web interface detected")
+		out.Info("ℹ️  No web interface detected")
 	}
 }
 
-func detectVendor(router *common.RouterInfo, content string) {
+func detectVendor(router *common.RouterInfo, content string, out output.Output) {
 	for vendor, pattern := range vendorPatterns {
 		if pattern.MatchString(content) {
 			router.Vendor = vendor
-			fmt.Printf("  📱 Detected vendor: %s\n", strings.Title(vendor))
+			out.Info("📱 Detected vendor: %s", strings.Title(vendor))
 			break
 		}
 	}
@@ -253,12 +254,12 @@ func detectVendor(router *common.RouterInfo, content string) {
 	if matches := titlePattern.FindStringSubmatch(content); len(matches) > 1 {
 		title := strings.TrimSpace(matches[1])
 		if router.Vendor == "" && title != "" {
-			fmt.Printf("  📄 Page title: %s\n", title)
+			out.Info("📄 Page title: %s", title)
 		}
 	}
 }
 
-func checkDefaultPage(router *common.RouterInfo, content, url string) {
+func checkDefaultPage(router *common.RouterInfo, content, url string, out output.Output) {
 	contentLower := strings.ToLower(content)
 	for _, indicator := range defaultPageIndicators {
 		if strings.Contains(contentLower, indicator) {
@@ -267,13 +268,13 @@ func checkDefaultPage(router *common.RouterInfo, content, url string) {
 				Description: "Default setup page detected",
 				Details:     fmt.Sprintf("Router appears to be using default configuration at %s", url),
 			})
-			fmt.Printf("  ⚠️  Default setup page detected\n")
+			out.Warning("Default setup page detected")
 			return
 		}
 	}
 }
 
-func checkDefaultCredentials(router *common.RouterInfo, baseURL string) {
+func checkDefaultCredentials(router *common.RouterInfo, baseURL string, out output.Output) {
 	if router.Vendor == "" {
 		return
 	}
@@ -283,7 +284,7 @@ func checkDefaultCredentials(router *common.RouterInfo, baseURL string) {
 		return
 	}
 
-	fmt.Printf("  🔐 Testing default credentials for %s...\n", router.Vendor)
+	out.Info("🔐 Testing default credentials for %s...", router.Vendor)
 
 	client := &http.Client{
 		Timeout: common.HTTPTimeout,
@@ -297,12 +298,12 @@ func checkDefaultCredentials(router *common.RouterInfo, baseURL string) {
 				Description: "Default credentials are active",
 				Details:     fmt.Sprintf("Username: '%s', Password: '%s'", cred.Username, cred.Password),
 			})
-			fmt.Printf("  🚨 Default credentials work: %s/%s\n", cred.Username, cred.Password)
+			out.Error("🚨 Default credentials work: %s/%s", cred.Username, cred.Password)
 			return
 		}
 	}
 
-	fmt.Printf("  ✅ Default credentials not working\n")
+	out.Success("Default credentials not working")
 }
 
 func testCredentials(client *http.Client, baseURL, username, password string) bool {

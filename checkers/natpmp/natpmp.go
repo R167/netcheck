@@ -1,12 +1,12 @@
 package natpmp
 
 import (
-	"fmt"
 	"net"
 	"time"
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type NATpmpChecker struct{}
@@ -45,11 +45,11 @@ func (c *NATpmpChecker) Dependencies() []checker.Dependency {
 	return []checker.Dependency{checker.DependencyGateway, checker.DependencyRouterInfo}
 }
 
-func (c *NATpmpChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
-	checkNATpmp(router)
+func (c *NATpmpChecker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
+	checkNATpmp(router, out)
 }
 
-func (c *NATpmpChecker) RunStandalone(config checker.CheckerConfig) {
+func (c *NATpmpChecker) RunStandalone(config checker.CheckerConfig, out output.Output) {
 	// Router-based checker - no standalone functionality
 }
 
@@ -70,19 +70,19 @@ func (c *NATpmpChecker) MCPToolDefinition() *checker.MCPTool {
 	}
 }
 
-func checkNATpmp(router *common.RouterInfo) {
-	fmt.Println("\n🔍 Checking NAT-PMP...")
+func checkNATpmp(router *common.RouterInfo, out output.Output) {
+	out.Section("🔍", "Checking NAT-PMP...")
 	// Send NAT-PMP external address request
 	if sendNATpmpRequest(router.IP) {
 		router.NATpmpEnabled = true
-		fmt.Println("  📡 NAT-PMP service detected")
+		out.Info("📡 NAT-PMP service detected")
 		router.Issues = append(router.Issues, common.SecurityIssue{
 			Severity:    common.SeverityMedium,
 			Description: "NAT-PMP service is enabled",
 			Details:     "NAT-PMP allows automatic port mapping. Ensure it's properly secured.",
 		})
 	} else {
-		fmt.Println("  ✅ No NAT-PMP service detected")
+		out.Success("No NAT-PMP service detected")
 	}
 }
 

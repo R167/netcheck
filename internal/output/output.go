@@ -194,3 +194,20 @@ func (o *BufferedOutput) Lines() []OutputLine {
 	defer o.mu.Unlock()
 	return append([]OutputLine{}, o.lines...)
 }
+
+// NoOpOutput is a no-op implementation for tests
+type NoOpOutput struct{}
+
+func NewNoOpOutput() *NoOpOutput {
+	return &NoOpOutput{}
+}
+
+func (o *NoOpOutput) Section(icon, title string)                 {}
+func (o *NoOpOutput) Header(title string)                        {}
+func (o *NoOpOutput) Info(format string, args ...interface{})    {}
+func (o *NoOpOutput) Success(format string, args ...interface{}) {}
+func (o *NoOpOutput) Warning(format string, args ...interface{}) {}
+func (o *NoOpOutput) Error(format string, args ...interface{})   {}
+func (o *NoOpOutput) Detail(format string, args ...interface{})  {}
+func (o *NoOpOutput) Println(s string)                           {}
+func (o *NoOpOutput) Printf(format string, args ...interface{})  {}

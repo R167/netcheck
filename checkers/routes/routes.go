@@ -7,6 +7,7 @@ import (
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type RoutesChecker struct{}
@@ -45,12 +46,12 @@ func (c *RoutesChecker) Dependencies() []checker.Dependency {
 	return []checker.Dependency{}
 }
 
-func (c *RoutesChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+func (c *RoutesChecker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
 	// Standalone checker - no router-based functionality
 }
 
-func (c *RoutesChecker) RunStandalone(config checker.CheckerConfig) {
-	checkRoutes()
+func (c *RoutesChecker) RunStandalone(config checker.CheckerConfig, out output.Output) {
+	checkRoutes(out)
 }
 
 func (c *RoutesChecker) MCPToolDefinition() *checker.MCPTool {
@@ -66,32 +67,29 @@ func (c *RoutesChecker) MCPToolDefinition() *checker.MCPTool {
 }
 
 // checkRoutes displays the system's routing table information
-func checkRoutes() {
-	fmt.Println("📍 Routing Information")
-	fmt.Println("=====================")
+func checkRoutes(out output.Output) {
+	out.Section("📍", "Routing Information")
 
 	// Get IPv4 routes
 	ipv4Routes := getIPv4Routes()
 	if len(ipv4Routes) > 0 {
-		fmt.Printf("  📡 IPv4 Routes (%d entries):\n", len(ipv4Routes))
+		out.Info("📡 IPv4 Routes (%d entries):", len(ipv4Routes))
 		for _, route := range ipv4Routes {
-			fmt.Printf("    %s\n", route)
+			out.Info("  %s", route)
 		}
-		fmt.Println()
 	}
 
 	// Get IPv6 routes
 	ipv6Routes := getIPv6Routes()
 	if len(ipv6Routes) > 0 {
-		fmt.Printf("  🌐 IPv6 Routes (%d entries):\n", len(ipv6Routes))
+		out.Info("🌐 IPv6 Routes (%d entries):", len(ipv6Routes))
 		for _, route := range ipv6Routes {
-			fmt.Printf("    %s\n", route)
+			out.Info("  %s", route)
 		}
-		fmt.Println()
 	}
 
 	if len(ipv4Routes) == 0 && len(ipv6Routes) == 0 {
-		fmt.Println("  ℹ️  No routing information available")
+		out.Info("ℹ️  No routing information available")
 	}
 }
 

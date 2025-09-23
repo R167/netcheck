@@ -1,13 +1,13 @@
 package ports
 
 import (
-	"fmt"
 	"net"
 	"strconv"
 	"time"
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type PortsChecker struct{}
@@ -70,12 +70,12 @@ func (c *PortsChecker) Dependencies() []checker.Dependency {
 	return []checker.Dependency{checker.DependencyGateway, checker.DependencyRouterInfo}
 }
 
-func (c *PortsChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+func (c *PortsChecker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
 	cfg := config.(PortsConfig)
-	scanCommonPorts(router, cfg)
+	scanCommonPorts(router, cfg, out)
 }
 
-func (c *PortsChecker) RunStandalone(config checker.CheckerConfig) {
+func (c *PortsChecker) RunStandalone(config checker.CheckerConfig, out output.Output) {
 }
 
 func (c *PortsChecker) MCPToolDefinition() *checker.MCPTool {
@@ -103,13 +103,13 @@ func (c *PortsChecker) MCPToolDefinition() *checker.MCPTool {
 	}
 }
 
-func scanCommonPorts(router *common.RouterInfo, cfg PortsConfig) {
-	fmt.Println("\n🔍 Scanning common management ports...")
+func scanCommonPorts(router *common.RouterInfo, cfg PortsConfig, out output.Output) {
+	out.Section("🔍", "Scanning common management ports...")
 
 	for _, port := range cfg.Ports {
 		if isPortOpen(router.IP, port, cfg.PortTimeout) {
 			router.OpenPorts = append(router.OpenPorts, port)
-			fmt.Printf("  ✅ Port %d open\n", port)
+			out.Success("Port %d open", port)
 
 			if issue, exists := managementPorts[port]; exists {
 				router.Issues = append(router.Issues, issue)
@@ -118,7 +118,7 @@ func scanCommonPorts(router *common.RouterInfo, cfg PortsConfig) {
 	}
 
 	if len(router.OpenPorts) == 0 {
-		fmt.Println("  ℹ️  No common management ports detected")
+		out.Info("ℹ️  No common management ports detected")
 	}
 }
 

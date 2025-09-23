@@ -9,6 +9,7 @@ import (
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type IPv6Checker struct{}
@@ -79,12 +80,12 @@ func (c *IPv6Checker) Dependencies() []checker.Dependency {
 	return []checker.Dependency{checker.DependencyNetwork, checker.DependencyRouterInfo}
 }
 
-func (c *IPv6Checker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
+func (c *IPv6Checker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
 	cfg := config.(IPv6Config)
-	checkIPv6(router, cfg)
+	checkIPv6(router, cfg, out)
 }
 
-func (c *IPv6Checker) RunStandalone(config checker.CheckerConfig) {
+func (c *IPv6Checker) RunStandalone(config checker.CheckerConfig, out output.Output) {
 	// Router-based checker - no standalone functionality
 }
 
@@ -140,27 +141,27 @@ func isVirtualInterface(name string) bool {
 	return false
 }
 
-func checkIPv6(router *common.RouterInfo, cfg IPv6Config) {
-	fmt.Println("\n🔍 Checking IPv6 configuration...")
+func checkIPv6(router *common.RouterInfo, cfg IPv6Config, out output.Output) {
+	out.Section("🔍", "Checking IPv6 configuration...")
 
 	// Get comprehensive IPv6 information
 	ipv6Info := getIPv6Information(cfg.ShowVirtual)
 
 	if len(ipv6Info) == 0 {
-		fmt.Println("  ℹ️  No IPv6 configuration detected")
+		out.Info("ℹ️  No IPv6 configuration detected")
 		return
 	}
 
 	router.IPv6Enabled = true
 
 	// Analyze and display IPv6 configuration
-	analyzeIPv6Configuration(ipv6Info, router)
+	analyzeIPv6Configuration(ipv6Info, router, out)
 
 	// Check for potential security issues
 	assessIPv6Security(ipv6Info, router)
 
 	// Test IPv6 gateway connectivity
-	testIPv6Gateway(router)
+	testIPv6Gateway(router, out)
 }
 
 // getIPv6Information gathers comprehensive IPv6 configuration data
@@ -413,20 +414,20 @@ func getIPv6Router(ifaceName string) string {
 }
 
 // analyzeIPv6Configuration displays comprehensive IPv6 analysis
-func analyzeIPv6Configuration(interfaces []IPv6InterfaceInfo, router *common.RouterInfo) {
+func analyzeIPv6Configuration(interfaces []IPv6InterfaceInfo, router *common.RouterInfo, out output.Output) {
 	totalAddresses := 0
 	globalInterfaces := 0
 	linkLocalInterfaces := 0
 	tempAddresses := 0
 
-	fmt.Printf("  🌐 IPv6 is enabled on %d interface(s)\n", len(interfaces))
+	out.Info("🌐 IPv6 is enabled on %d interface(s)", len(interfaces))
 
 	for _, iface := range interfaces {
 		if len(iface.Addresses) == 0 {
 			continue
 		}
 
-		fmt.Printf("\n  📡 Interface: %s\n", iface.Name)
+		out.Info("📡 Interface: %s", iface.Name)
 
 		// Display address breakdown
 		for _, addr := range iface.Addresses {
@@ -436,9 +437,9 @@ func analyzeIPv6Configuration(interfaces []IPv6InterfaceInfo, router *common.Rou
 				tempAddresses++
 			}
 
-			fmt.Printf("    %s %s (%s, %s scope)\n", statusIcon, addr.Address, addr.Type, addr.Scope)
+			out.Info("  %s %s (%s, %s scope)", statusIcon, addr.Address, addr.Type, addr.Scope)
 			if addr.Prefix != addr.Address {
-				fmt.Printf("       Network: %s\n", addr.Prefix)
+				out.Info("     Network: %s", addr.Prefix)
 			}
 		}
 
@@ -452,22 +453,22 @@ func analyzeIPv6Configuration(interfaces []IPv6InterfaceInfo, router *common.Rou
 
 		// Display router if found
 		if iface.RouterAddress != "" {
-			fmt.Printf("    🔗 Router: %s\n", iface.RouterAddress)
+			out.Info("  🔗 Router: %s", iface.RouterAddress)
 		}
 
 		// Display flags and configuration
 		if len(iface.Flags) > 0 {
-			fmt.Printf("    ⚙️  Flags: %s\n", strings.Join(iface.Flags, ", "))
+			out.Info("  ⚙️  Flags: %s", strings.Join(iface.Flags, ", "))
 		}
 	}
 
 	// Summary statistics
-	fmt.Printf("\n  📊 IPv6 Summary:\n")
-	fmt.Printf("    • Total addresses: %d\n", totalAddresses)
-	fmt.Printf("    • Global interfaces: %d\n", globalInterfaces)
-	fmt.Printf("    • Link-local interfaces: %d\n", linkLocalInterfaces)
+	out.Info("📊 IPv6 Summary:")
+	out.Info("  • Total addresses: %d", totalAddresses)
+	out.Info("  • Global interfaces: %d", globalInterfaces)
+	out.Info("  • Link-local interfaces: %d", linkLocalInterfaces)
 	if tempAddresses > 0 {
-		fmt.Printf("    • Temporary addresses: %d (Privacy Extensions enabled)\n", tempAddresses)
+		out.Info("  • Temporary addresses: %d (Privacy Extensions enabled)", tempAddresses)
 	}
 }
 
@@ -525,8 +526,8 @@ func assessIPv6Security(interfaces []IPv6InterfaceInfo, router *common.RouterInf
 }
 
 // testIPv6Gateway tests connectivity to IPv6 gateways
-func testIPv6Gateway(router *common.RouterInfo) {
-	fmt.Printf("\n  🔍 Testing IPv6 gateway connectivity...\n")
+func testIPv6Gateway(router *common.RouterInfo, out output.Output) {
+	out.Section("🔍", "Testing IPv6 gateway connectivity...")
 
 	// Common IPv6 gateway patterns to test
 	gatewayPatterns := []string{
@@ -541,16 +542,16 @@ func testIPv6Gateway(router *common.RouterInfo) {
 	for _, gateway := range gatewayPatterns {
 		if testIPv6Connectivity(gateway) {
 			reachableGateways++
-			fmt.Printf("    ✅ %s reachable\n", gateway)
+			out.Success("%s reachable", gateway)
 
 			if gateway == "fe80::1" {
-				fmt.Printf("    📡 Local IPv6 gateway detected\n")
+				out.Info("📡 Local IPv6 gateway detected")
 			}
 		}
 	}
 
 	if reachableGateways > 0 {
-		fmt.Printf("  🌐 IPv6 internet connectivity appears functional\n")
+		out.Info("🌐 IPv6 internet connectivity appears functional")
 
 		router.Issues = append(router.Issues, common.SecurityIssue{
 			Severity:    common.SeverityMedium,
@@ -558,7 +559,7 @@ func testIPv6Gateway(router *common.RouterInfo) {
 			Details:     "Device has active IPv6 internet connectivity. Ensure IPv6 firewall rules match IPv4 security policies.",
 		})
 	} else {
-		fmt.Printf("  ⚠️  No IPv6 gateways reachable (local IPv6 only)\n")
+		out.Warning("No IPv6 gateways reachable (local IPv6 only)")
 	}
 }
 

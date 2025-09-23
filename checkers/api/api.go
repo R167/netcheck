@@ -8,6 +8,7 @@ import (
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type APIChecker struct{}
@@ -76,11 +77,11 @@ func (c *APIChecker) Dependencies() []checker.Dependency {
 	return []checker.Dependency{checker.DependencyGateway, checker.DependencyRouterInfo}
 }
 
-func (c *APIChecker) Run(config checker.CheckerConfig, router *common.RouterInfo) {
-	checkRouterAPIs(router)
+func (c *APIChecker) Run(config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
+	checkRouterAPIs(router, out)
 }
 
-func (c *APIChecker) RunStandalone(config checker.CheckerConfig) {
+func (c *APIChecker) RunStandalone(config checker.CheckerConfig, out output.Output) {
 	// Router-based checker - no standalone functionality
 }
 
@@ -101,8 +102,8 @@ func (c *APIChecker) MCPToolDefinition() *checker.MCPTool {
 	}
 }
 
-func checkRouterAPIs(router *common.RouterInfo) {
-	fmt.Println("\n🔍 Checking for exposed APIs and services...")
+func checkRouterAPIs(router *common.RouterInfo, out output.Output) {
+	out.Section("🔍", "Checking for exposed APIs and services...")
 	client := &http.Client{Timeout: common.HTTPTimeout}
 
 	foundAPIs := 0
@@ -116,7 +117,7 @@ func checkRouterAPIs(router *common.RouterInfo) {
 
 		if resp.StatusCode == 200 {
 			foundAPIs++
-			fmt.Printf("  🔍 Found: %s (%s)\n", endpoint.Path, endpoint.Description)
+			out.Info("🔍 Found: %s (%s)", endpoint.Path, endpoint.Description)
 			if endpoint.Severity == common.SeverityHigh {
 				router.Issues = append(router.Issues, common.SecurityIssue{
 					Severity:    endpoint.Severity,
@@ -128,15 +129,15 @@ func checkRouterAPIs(router *common.RouterInfo) {
 	}
 
 	if foundAPIs == 0 {
-		fmt.Println("  ✅ No suspicious API endpoints detected")
+		out.Success("No suspicious API endpoints detected")
 	}
 
 	// Check for WPS (WiFi Protected Setup)
-	checkWPS(router)
+	checkWPS(router, out)
 }
 
-func checkWPS(router *common.RouterInfo) {
-	fmt.Println("\n🔍 Checking WPS configuration...")
+func checkWPS(router *common.RouterInfo, out output.Output) {
+	out.Section("🔍", "Checking WPS configuration...")
 	client := &http.Client{Timeout: common.HTTPTimeout}
 
 	for _, path := range wpsPaths {
@@ -155,7 +156,7 @@ func checkWPS(router *common.RouterInfo) {
 
 			content := strings.ToLower(string(body))
 			if strings.Contains(content, "wps") && strings.Contains(content, "enabled") {
-				fmt.Println("  ⚠️  WPS may be enabled")
+				out.Warning("WPS may be enabled")
 				router.Issues = append(router.Issues, common.SecurityIssue{
 					Severity:    common.SeverityMedium,
 					Description: "WPS (WiFi Protected Setup) may be enabled",
@@ -166,5 +167,5 @@ func checkWPS(router *common.RouterInfo) {
 		}
 	}
 
-	fmt.Println("  ℹ️  WPS configuration not accessible")
+	out.Info("ℹ️  WPS configuration not accessible")
 }

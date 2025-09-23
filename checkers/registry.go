@@ -16,6 +16,7 @@ import (
 	"github.com/R167/netcheck/checkers/upnp"
 	"github.com/R167/netcheck/checkers/web"
 	"github.com/R167/netcheck/internal/checker"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type CheckInfo struct {
@@ -55,17 +56,17 @@ func GetChecker(name string) checker.Checker {
 	return nil
 }
 
-func RunChecker(name string, config checker.CheckerConfig, router *common.RouterInfo) {
+func RunChecker(name string, config checker.CheckerConfig, router *common.RouterInfo, out output.Output) {
 	c := GetChecker(name)
 	if c != nil && c.RequiresRouter() {
-		c.Run(config, router)
+		c.Run(config, router, out)
 	}
 }
 
-func RunStandaloneChecker(name string, config checker.CheckerConfig) {
+func RunStandaloneChecker(name string, config checker.CheckerConfig, out output.Output) {
 	c := GetChecker(name)
 	if c != nil && !c.RequiresRouter() {
-		c.RunStandalone(config)
+		c.RunStandalone(config, out)
 	}
 }
 

@@ -2,6 +2,7 @@ package checker
 
 import (
 	"github.com/R167/netcheck/checkers/common"
+	"github.com/R167/netcheck/internal/output"
 )
 
 type CheckerConfig interface{}
@@ -58,12 +59,13 @@ type Checker interface {
 	Dependencies() []Dependency
 
 	// Run executes the checker against a router with the given configuration.
-	// The checker should mutate the router parameter to add findings.
-	Run(config CheckerConfig, router *common.RouterInfo)
+	// The checker should mutate the router parameter to add findings and use
+	// the output interface for all printing.
+	Run(config CheckerConfig, router *common.RouterInfo, out output.Output)
 
 	// RunStandalone executes the checker without router context.
 	// Only used by standalone checkers (RequiresRouter() == false).
-	RunStandalone(config CheckerConfig)
+	RunStandalone(config CheckerConfig, out output.Output)
 
 	// MCPToolDefinition returns the MCP tool schema for this checker.
 	// Used when running in MCP server mode for protocol integration.

@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"sort"
 	"strings"
@@ -13,6 +12,8 @@ import (
 	"github.com/R167/netcheck/checkers"
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/mcp"
+	"github.com/R167/netcheck/internal/output"
+	"github.com/R167/netcheck/internal/runner"
 	"github.com/R167/netcheck/starlink"
 )
 
@@ -105,10 +106,13 @@ func runNetcheck() {
 	// Determine which checks to run
 	selectedChecks := getSelectedChecks()
 
+	// Create output interface for streaming
+	out := output.NewStreamingOutput(os.Stdout)
+
 	// Run standalone checks first (routes, device, external, lldp - not migrated yet)
 	for _, check := range selectedChecks {
 		if !check.RequiresRouter {
-			check.StandaloneFunc()
+			check.StandaloneFunc(out)
 		}
 	}
 
@@ -126,7 +130,7 @@ func runNetcheck() {
 	}
 
 	// Get gateway for router-based checks
-	gatewayIP := getGatewayIP()
+	gatewayIP := runner.DiscoverGateway()
 	if gatewayIP == "" {
 		fmt.Println("❌ Could not determine gateway IP")
 		os.Exit(1)
@@ -148,7 +152,7 @@ func runNetcheck() {
 	// Run router-based checks
 	for _, check := range selectedChecks {
 		if check.RequiresRouter {
-			check.RunFunc(router)
+			check.RunFunc(router, out)
 		}
 	}
 
@@ -192,25 +196,6 @@ func getSelectedChecks() []Check {
 	}
 
 	return selected
-}
-
-func getGatewayIP() string {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		return ""
-	}
-	defer conn.Close()
-
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	ip := localAddr.IP.String()
-
-	parts := strings.Split(ip, ".")
-	if len(parts) != 4 {
-		return ""
-	}
-
-	parts[3] = "1"
-	return strings.Join(parts, ".")
 }
 
 func generateReport(router *common.RouterInfo) {
@@ -331,8 +316,8 @@ type Check struct {
 	Description    string
 	Icon           string
 	Flag           *bool
-	RunFunc        func(*common.RouterInfo)
-	StandaloneFunc func()
+	RunFunc        func(*common.RouterInfo, output.Output)
+	StandaloneFunc func(output.Output)
 	RequiresRouter bool
 	DefaultEnabled bool
 }
@@ -363,16 +348,16 @@ func buildChecksRegistry() []Check {
 		checkerName := checker.Name()
 		checkerConfig := checker.DefaultConfig()
 
-		var runFunc func(*common.RouterInfo)
-		var standaloneFunc func()
+		var runFunc func(*common.RouterInfo, output.Output)
+		var standaloneFunc func(output.Output)
 
 		if checker.RequiresRouter() {
-			runFunc = func(r *common.RouterInfo) {
-				checkers.RunChecker(checkerName, checkerConfig, r)
+			runFunc = func(r *common.RouterInfo, out output.Output) {
+				checkers.RunChecker(checkerName, checkerConfig, r, out)
 			}
 		} else {
-			standaloneFunc = func() {
-				checkers.RunStandaloneChecker(checkerName, checkerConfig)
+			standaloneFunc = func(out output.Output) {
+				checkers.RunStandaloneChecker(checkerName, checkerConfig, out)
 			}
 		}
 
