@@ -134,10 +134,6 @@ Issues are categorized by severity:
 
 Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
 
-## License
-
-MIT License - see LICENSE file for details.
-
 ## Disclaimer
 
 This tool is intended for security assessment of networks you own or have explicit permission to test. Users are responsible for complying with all applicable laws and regulations.
