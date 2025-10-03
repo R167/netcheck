@@ -104,17 +104,24 @@ func (c *SSDPChecker) MCPToolDefinition() *checker.MCPTool {
 
 func discoverSSDPServices(router *common.RouterInfo, cfg SSDPConfig, out output.Output) {
 	out.Section("📡", "Discovering SSDP services...")
+	out.Debug("SSDP: Starting discovery (IPv4=%v, IPv6=%v, timeout=%v)",
+		cfg.IPv4Enabled, cfg.IPv6Enabled, cfg.DiscoveryTimeout)
 
 	var allServices []common.SSDPService
 
 	if cfg.IPv4Enabled {
-		ipv4Services := discoverSSDP("239.255.255.250:1900", "IPv4", cfg)
+		out.Debug("SSDP: Discovering IPv4 services at 239.255.255.250:1900")
+		ipv4Services := discoverSSDP("239.255.255.250:1900", "IPv4", cfg, out)
+		out.Debug("SSDP: Found %d IPv4 services", len(ipv4Services))
 		allServices = append(allServices, ipv4Services...)
 	}
 
 	if cfg.IPv6Enabled {
 		for _, scope := range []string{"ff02::c", "ff05::c", "ff08::c"} {
-			ipv6Services := discoverSSDP(scope+":1900", "IPv6", cfg)
+			addr := scope + ":1900"
+			out.Debug("SSDP: Discovering IPv6 services at %s", addr)
+			ipv6Services := discoverSSDP(addr, "IPv6", cfg, out)
+			out.Debug("SSDP: Found %d IPv6 services at %s", len(ipv6Services), scope)
 			allServices = append(allServices, ipv6Services...)
 		}
 	}
@@ -156,36 +163,43 @@ func discoverSSDPServices(router *common.RouterInfo, cfg SSDPConfig, out output.
 	}
 }
 
-func discoverSSDP(multicastAddr string, ipVersion string, cfg SSDPConfig) []common.SSDPService {
+func discoverSSDP(multicastAddr string, ipVersion string, cfg SSDPConfig, out output.Output) []common.SSDPService {
 	var services []common.SSDPService
 
 	for _, target := range cfg.SearchTargets {
-		discovered := performSSDPDiscovery(multicastAddr, target, ipVersion, cfg.DiscoveryTimeout)
+		out.Debug("SSDP: Searching for %s on %s", target, multicastAddr)
+		discovered := performSSDPDiscovery(multicastAddr, target, ipVersion, cfg.DiscoveryTimeout, out)
+		out.Debug("SSDP: Found %d devices for target %s", len(discovered), target)
 		services = append(services, discovered...)
 	}
 
 	return services
 }
 
-func performSSDPDiscovery(multicastAddr, searchTarget, ipVersion string, timeout time.Duration) []common.SSDPService {
+func performSSDPDiscovery(multicastAddr, searchTarget, ipVersion string, timeout time.Duration, out output.Output) []common.SSDPService {
 	network := "udp4"
 	if ipVersion == "IPv6" {
 		network = "udp6"
 	}
 
+	out.Debug("SSDP: Resolving %s address", network)
 	localAddr, err := net.ResolveUDPAddr(network, ":0")
 	if err != nil {
+		out.Debug("SSDP: Failed to resolve local address: %v", err)
 		return nil
 	}
 
+	out.Debug("SSDP: Creating %s listener", network)
 	conn, err := net.ListenUDP(network, localAddr)
 	if err != nil {
+		out.Debug("SSDP: Failed to create listener: %v", err)
 		return nil
 	}
 	defer conn.Close()
 
 	maddr, err := net.ResolveUDPAddr(network, multicastAddr)
 	if err != nil {
+		out.Debug("SSDP: Failed to resolve multicast address: %v", err)
 		return nil
 	}
 
@@ -195,11 +209,14 @@ func performSSDPDiscovery(multicastAddr, searchTarget, ipVersion string, timeout
 		"ST: %s\r\n"+
 		"MX: 3\r\n\r\n", multicastAddr, searchTarget)
 
+	out.Debug("SSDP: Sending M-SEARCH request")
 	_, err = conn.WriteTo([]byte(ssdpRequest), maddr)
 	if err != nil {
+		out.Debug("SSDP: Failed to send request: %v", err)
 		return nil
 	}
 
+	out.Debug("SSDP: Waiting for responses (timeout: %v)", timeout)
 	conn.SetDeadline(time.Now().Add(timeout))
 	buffer := make([]byte, 4096)
 
@@ -212,10 +229,12 @@ func performSSDPDiscovery(multicastAddr, searchTarget, ipVersion string, timeout
 			break
 		}
 
+		out.Debug("SSDP: Received %d bytes", n)
 		response := string(buffer[:n])
 		ssdp := parseSSDPResponse(response, ipVersion)
 		if ssdp != nil && ssdp.USN != "" && !seenUSNs[ssdp.USN] {
 			seenUSNs[ssdp.USN] = true
+			out.Debug("SSDP: Found new service: %s", ssdp.USN)
 
 			if ssdp.Location != "" {
 				enrichServiceInfo(ssdp)
@@ -225,6 +244,7 @@ func performSSDPDiscovery(multicastAddr, searchTarget, ipVersion string, timeout
 		}
 	}
 
+	out.Debug("SSDP: Discovery complete, found %d unique services", len(services))
 	return services
 }
 

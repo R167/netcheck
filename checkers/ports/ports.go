@@ -105,28 +105,36 @@ func (c *PortsChecker) MCPToolDefinition() *checker.MCPTool {
 
 func scanCommonPorts(router *common.RouterInfo, cfg PortsConfig, out output.Output) {
 	out.Section("🔍", "Scanning common management ports...")
+	out.Debug("Ports: Scanning %d ports on %s with timeout %v", len(cfg.Ports), router.IP, cfg.PortTimeout)
 
 	for _, port := range cfg.Ports {
-		if isPortOpen(router.IP, port, cfg.PortTimeout) {
+		out.Debug("Ports: Testing port %d", port)
+		if isPortOpen(router.IP, port, cfg.PortTimeout, out) {
 			router.OpenPorts = append(router.OpenPorts, port)
 			out.Success("Port %d open", port)
 
 			if issue, exists := managementPorts[port]; exists {
 				router.Issues = append(router.Issues, issue)
+				out.Debug("Ports: Port %d has security implications", port)
 			}
 		}
 	}
 
 	if len(router.OpenPorts) == 0 {
 		out.Info("ℹ️  No common management ports detected")
+	} else {
+		out.Debug("Ports: Found %d open ports", len(router.OpenPorts))
 	}
 }
 
-func isPortOpen(ip string, port int, timeout time.Duration) bool {
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, strconv.Itoa(port)), timeout)
+func isPortOpen(ip string, port int, timeout time.Duration, out output.Output) bool {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	conn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
+		out.Debug("Ports: Port %d closed or filtered: %v", port, err)
 		return false
 	}
 	conn.Close()
+	out.Debug("Ports: Port %d is open", port)
 	return true
 }

@@ -90,14 +90,17 @@ func (c *MDNSChecker) MCPToolDefinition() *checker.MCPTool {
 
 func checkMDNS(router *common.RouterInfo, cfg MDNSConfig, out output.Output) {
 	out.Section("🔍", "Checking mDNS/Bonjour services...")
+	out.Debug("mDNS: Starting service discovery (detailed=%v)", cfg.Detailed)
 
 	if cfg.Detailed {
 		// Comprehensive mDNS service discovery
-		services := discoverMDNSServices()
+		out.Debug("mDNS: Performing detailed service discovery")
+		services := discoverMDNSServices(out)
 		router.MDNSServices = services
 
 		if len(services) > 0 {
 			router.MDNSEnabled = true
+			out.Debug("mDNS: Found %d services", len(services))
 			out.Info("📡 Found %d mDNS services", len(services))
 
 			for _, service := range services {
@@ -121,7 +124,8 @@ func checkMDNS(router *common.RouterInfo, cfg MDNSConfig, out output.Output) {
 		}
 	} else {
 		// Basic mDNS detection
-		if sendMDNSQuery() {
+		out.Debug("mDNS: Performing basic detection")
+		if sendMDNSQuery(out) {
 			router.MDNSEnabled = true
 			out.Info("📡 mDNS service detected (use detailed flag for comprehensive scan)")
 
@@ -131,15 +135,18 @@ func checkMDNS(router *common.RouterInfo, cfg MDNSConfig, out output.Output) {
 				Details:     "mDNS can expose device information to the local network. Use detailed flag for comprehensive discovery.",
 			})
 		} else {
+			out.Debug("mDNS: No service detected")
 			out.Success("No mDNS service detected")
 		}
 	}
 }
 
 // sendMDNSQuery sends a basic mDNS query to detect if the service is running
-func sendMDNSQuery() bool {
+func sendMDNSQuery(out output.Output) bool {
+	out.Debug("mDNS: Connecting to 224.0.0.251:5353")
 	conn, err := net.Dial("udp", "224.0.0.251:5353")
 	if err != nil {
+		out.Debug("mDNS: Failed to connect: %v", err)
 		return false
 	}
 	defer conn.Close()
@@ -162,24 +169,34 @@ func sendMDNSQuery() bool {
 		0x00, 0x01, // Class IN
 	}
 
+	out.Debug("mDNS: Sending query for _services._dns-sd._udp.local")
 	conn.SetDeadline(time.Now().Add(3 * time.Second))
 	_, err = conn.Write(query)
 	if err != nil {
+		out.Debug("mDNS: Failed to write query: %v", err)
 		return false
 	}
 
+	out.Debug("mDNS: Waiting for response (3s timeout)")
 	conn.SetDeadline(time.Now().Add(3 * time.Second))
 	buffer := make([]byte, 1024)
 	n, err := conn.Read(buffer)
 
-	return err == nil && n > 12 // Basic validation that we got a response
+	if err != nil {
+		out.Debug("mDNS: Failed to read response: %v", err)
+		return false
+	}
+
+	out.Debug("mDNS: Received %d bytes", n)
+	return n > 12 // Basic validation that we got a response
 }
 
-func discoverMDNSServices() []common.MDNSService {
+func discoverMDNSServices(out output.Output) []common.MDNSService {
 	// Suppress mdns library log output to reduce noise from IPv6 errors
 	log.SetOutput(io.Discard)
 	defer log.SetOutput(os.Stderr)
 
+	out.Debug("mDNS: Initializing service discovery")
 	var services []common.MDNSService
 	serviceMap := make(map[string]*common.MDNSService) // Use map to avoid duplicates
 
@@ -233,6 +250,7 @@ func discoverMDNSServices() []common.MDNSService {
 	typeMap := make(map[string]string)
 
 	// Query each service type
+	out.Debug("mDNS: Querying %d service types", len(serviceTypes))
 	for _, serviceType := range serviceTypes {
 		// Remove .local suffix for hashicorp/mdns
 		cleanServiceType := strings.TrimSuffix(serviceType, ".local")

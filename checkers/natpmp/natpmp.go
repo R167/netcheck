@@ -72,8 +72,9 @@ func (c *NATpmpChecker) MCPToolDefinition() *checker.MCPTool {
 
 func checkNATpmp(router *common.RouterInfo, out output.Output) {
 	out.Section("🔍", "Checking NAT-PMP...")
+	out.Debug("NAT-PMP: Checking gateway %s on port 5351", router.IP)
 	// Send NAT-PMP external address request
-	if sendNATpmpRequest(router.IP) {
+	if sendNATpmpRequest(router.IP, out) {
 		router.NATpmpEnabled = true
 		out.Info("📡 NAT-PMP service detected")
 		router.Issues = append(router.Issues, common.SecurityIssue{
@@ -82,33 +83,48 @@ func checkNATpmp(router *common.RouterInfo, out output.Output) {
 			Details:     "NAT-PMP allows automatic port mapping. Ensure it's properly secured.",
 		})
 	} else {
+		out.Debug("NAT-PMP: No service detected on %s", router.IP)
 		out.Success("No NAT-PMP service detected")
 	}
 }
 
-func sendNATpmpRequest(gatewayIP string) bool {
+func sendNATpmpRequest(gatewayIP string, out output.Output) bool {
+	out.Debug("NAT-PMP: Connecting to %s:5351", gatewayIP)
 	conn, err := net.Dial("udp", gatewayIP+":5351")
 	if err != nil {
+		out.Debug("NAT-PMP: Failed to connect: %v", err)
 		return false
 	}
 	defer conn.Close()
 
 	// NAT-PMP external address request: version=0, opcode=0
 	request := []byte{0, 0}
+	out.Debug("NAT-PMP: Sending external address request")
 
 	conn.SetDeadline(time.Now().Add(common.NATpmpTimeout))
 	_, err = conn.Write(request)
 	if err != nil {
+		out.Debug("NAT-PMP: Failed to write request: %v", err)
 		return false
 	}
 
 	response := make([]byte, 12)
 	n, err := conn.Read(response)
 	if err != nil || n < 8 {
+		out.Debug("NAT-PMP: Failed to read response (n=%d): %v", n, err)
 		return false
 	}
 
+	out.Debug("NAT-PMP: Received response (%d bytes): version=%d opcode=%d result=%d",
+		n, response[0], response[1], response[2])
+
 	// Check if response is valid NAT-PMP response
 	// Version should be 0, opcode should be 128 (0x80 + 0), result should be 0 for success
-	return response[0] == 0 && response[1] == 128 && response[2] == 0 && response[3] == 0
+	isValid := response[0] == 0 && response[1] == 128 && response[2] == 0 && response[3] == 0
+	if isValid {
+		out.Debug("NAT-PMP: Valid response received")
+	} else {
+		out.Debug("NAT-PMP: Invalid response format")
+	}
+	return isValid
 }

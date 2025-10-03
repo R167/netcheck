@@ -109,10 +109,12 @@ func (c *UPnPChecker) MCPToolDefinition() *checker.MCPTool {
 
 func checkUPnP(router *common.RouterInfo, cfg UPnPConfig, out output.Output) {
 	out.Section("🔍", "Checking UPnP services...")
+	out.Debug("UPnP: Starting SSDP multicast discovery")
 
-	upnpInfo := checkSSDPMulticast()
+	upnpInfo := checkSSDPMulticast(out)
 	if upnpInfo != nil {
 		router.UPnPEnabled = true
+		out.Debug("UPnP: SSDP discovery successful")
 		out.Info("📡 UPnP SSDP discovered")
 		out.Info("🔗 Location: %s", upnpInfo.Location)
 		out.Info("🖥️  Server: %s", upnpInfo.Server)
@@ -178,20 +180,26 @@ func checkUPnP(router *common.RouterInfo, cfg UPnPConfig, out output.Output) {
 	}
 }
 
-func checkSSDPMulticast() *common.SSDPResponse {
+func checkSSDPMulticast(out output.Output) *common.SSDPResponse {
+	out.Debug("UPnP: Resolving local UDP address")
 	localAddr, err := net.ResolveUDPAddr("udp4", ":0")
 	if err != nil {
+		out.Debug("UPnP: Failed to resolve local address: %v", err)
 		return nil
 	}
 
+	out.Debug("UPnP: Creating UDP listener")
 	conn, err := net.ListenUDP("udp4", localAddr)
 	if err != nil {
+		out.Debug("UPnP: Failed to create UDP listener: %v", err)
 		return nil
 	}
 	defer conn.Close()
 
+	out.Debug("UPnP: Resolving multicast address 239.255.255.250:1900")
 	multicastAddr, err := net.ResolveUDPAddr("udp4", "239.255.255.250:1900")
 	if err != nil {
+		out.Debug("UPnP: Failed to resolve multicast address: %v", err)
 		return nil
 	}
 
@@ -201,30 +209,38 @@ func checkSSDPMulticast() *common.SSDPResponse {
 		"ST: urn:schemas-upnp-org:device:InternetGatewayDevice:2\r\n" +
 		"MX: 3\r\n\r\n"
 
+	out.Debug("UPnP: Sending SSDP M-SEARCH request")
 	_, err = conn.WriteTo([]byte(ssdpRequest), multicastAddr)
 	if err != nil {
+		out.Debug("UPnP: Failed to send SSDP request: %v", err)
 		return nil
 	}
 
+	out.Debug("UPnP: Waiting for SSDP response (5s timeout)")
 	conn.SetDeadline(time.Now().Add(5 * time.Second))
 	buffer := make([]byte, 2048)
 
 	for i := 0; i < 3; i++ {
+		out.Debug("UPnP: Reading SSDP response (attempt %d/3)", i+1)
 		n, _, err := conn.ReadFrom(buffer)
 		if err != nil {
+			out.Debug("UPnP: Failed to read response: %v", err)
 			continue
 		}
 
+		out.Debug("UPnP: Received %d bytes", n)
 		response := string(buffer[:n])
-		if ssdp := parseSSDPResponse(response); ssdp != nil {
+		if ssdp := parseSSDPResponse(response, out); ssdp != nil {
+			out.Debug("UPnP: Successfully parsed SSDP response")
 			return ssdp
 		}
 	}
 
+	out.Debug("UPnP: No valid SSDP responses received")
 	return nil
 }
 
-func parseSSDPResponse(response string) *common.SSDPResponse {
+func parseSSDPResponse(response string, out output.Output) *common.SSDPResponse {
 	lines := strings.Split(response, "\r\n")
 	ssdp := &common.SSDPResponse{}
 
@@ -232,16 +248,20 @@ func parseSSDPResponse(response string) *common.SSDPResponse {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(strings.ToUpper(line), "LOCATION:") {
 			ssdp.Location = strings.TrimSpace(line[9:])
+			out.Debug("UPnP: Found location: %s", ssdp.Location)
 		} else if strings.HasPrefix(strings.ToUpper(line), "SERVER:") {
 			ssdp.Server = strings.TrimSpace(line[7:])
+			out.Debug("UPnP: Found server: %s", ssdp.Server)
 		} else if strings.HasPrefix(strings.ToUpper(line), "USN:") {
 			ssdp.USN = strings.TrimSpace(line[4:])
+			out.Debug("UPnP: Found USN: %s", ssdp.USN)
 		}
 	}
 
 	if ssdp.Location != "" {
 		return ssdp
 	}
+	out.Debug("UPnP: Response missing location field")
 	return nil
 }
 
