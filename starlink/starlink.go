@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"time"
+
+	"github.com/R167/netcheck/internal/output"
 )
 
 const (
@@ -21,7 +23,7 @@ const (
 )
 
 // CheckStarlink attempts to detect and analyze a Starlink Dishy on the network
-func CheckStarlink() *StarLinkInfo {
+func CheckStarlink(out output.Output) *StarLinkInfo {
 	info := &StarLinkInfo{
 		Accessible:     false,
 		SecurityIssues: make([]SecurityIssue, 0),
@@ -37,35 +39,56 @@ func CheckStarlink() *StarLinkInfo {
 	var client *Client
 
 	for _, endpoint := range endpoints {
-		if c, err := NewClient(endpoint); err == nil {
-			// Test the connection by trying to get device info
-			if c.IsAccessible() {
-				workingEndpoint = endpoint
-				client = c
-				info.Accessible = true
-				break
-			}
-			c.Close()
+		out.Debug("Trying Starlink endpoint: %s", endpoint)
+		c, err := NewClient(endpoint, out)
+		if err != nil {
+			out.Debug("Failed to create client for %s: %v", endpoint, err)
+			continue
 		}
+
+		// Test the connection by trying to get device info
+		if c.IsAccessible() {
+			out.Debug("Successfully connected to Starlink at %s", endpoint)
+			workingEndpoint = endpoint
+			client = c
+			info.Accessible = true
+			break
+		}
+		out.Debug("Endpoint %s not accessible", endpoint)
+		c.Close()
 	}
 
 	if !info.Accessible || client == nil {
+		out.Debug("No accessible Starlink endpoint found")
 		return info
 	}
 	defer client.Close()
 
 	// Gather device information
-	if deviceInfo, err := client.GetDeviceInfo(); err == nil {
+	out.Debug("Gathering device information...")
+	deviceInfo, err := client.GetDeviceInfo()
+	if err != nil {
+		out.Debug("Failed to get device info: %v", err)
+	} else {
 		info.DeviceInfo = deviceInfo
+		out.Debug("Device info retrieved successfully")
 	}
 
 	// Gather status information
-	if status, err := client.GetStatus(); err == nil {
+	out.Debug("Gathering status information...")
+	status, err := client.GetStatus()
+	if err != nil {
+		out.Debug("Failed to get status: %v", err)
+	} else {
 		info.Status = status
 	}
 
 	// Gather configuration
-	if config, err := client.GetConfig(); err == nil {
+	out.Debug("Gathering configuration...")
+	config, err := client.GetConfig()
+	if err != nil {
+		out.Debug("Failed to get config: %v", err)
+	} else {
 		info.Config = config
 	}
 

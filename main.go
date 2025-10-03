@@ -53,6 +53,7 @@ var (
 
 	// Global configuration flags
 	mcpFlag         = flag.Bool("mcp", false, "Run in MCP server mode (stdout)")
+	debugFlag       = flag.Bool("debug", false, "Enable debug output for troubleshooting")
 	timeoutFlag     = flag.Duration("timeout", 60*time.Second, "Maximum time to run all tests (e.g. 30s, 2m, 1h)")
 	showVirtualFlag = flag.Bool("show-virtual", false, "Show virtual network interfaces (VPN tunnels, Docker bridges, etc.)")
 	portTimeoutFlag = flag.Duration("port-timeout", PortTimeout, "Timeout for individual port scans (e.g. 500ms, 1s, 2s)")
@@ -60,6 +61,11 @@ var (
 
 func main() {
 	flag.Parse()
+
+	// Enable debug mode if requested
+	if *debugFlag {
+		common.DebugMode = true
+	}
 
 	if *mcpFlag {
 		runMCPMode()

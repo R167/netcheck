@@ -4,22 +4,21 @@ This package provides a Go client for interacting with Starlink Dishy terminals 
 
 ## Implementation Approach
 
-The client uses the `grpcurl` command-line tool to interact with the Starlink gRPC API. While this requires an external dependency, it's much simpler and more reliable than implementing a full gRPC client with protobuf generation.
+The client uses native Go gRPC with reflection to interact with the Starlink gRPC API. This provides a robust, dependency-free solution without requiring external tools or pre-generated protobuf code.
 
-### Why grpcurl instead of generated protobuf client?
+### Why native gRPC with reflection?
 
-1. **Simplicity**: No need to maintain proto files or generate code
-2. **Reliability**: grpcurl handles all the gRPC reflection and protobuf encoding/decoding
-3. **Maintenance**: No need to update proto definitions when Starlink changes their API
-4. **Flexibility**: Works with any gRPC service that supports reflection
+1. **No external dependencies**: Pure Go implementation, no need for grpcurl binary
+2. **Reliability**: Direct gRPC connection with proper error handling
+3. **Maintenance**: Uses reflection to dynamically discover API structure
+4. **Performance**: Native implementation is faster than shelling out to external tools
+5. **Flexibility**: Works with any gRPC service that supports reflection
 
-## Key Improvements Made
+## Key Features
 
-The original implementation had race conditions and reliability issues:
-
-- **Race condition fix**: Removed conflicting timeouts between Go context (10s) and grpcurl (5s)
-- **Consistent timeouts**: Both Go context and grpcurl use 8-second timeouts with proper coordination
-- **Better error handling**: Graceful degradation when optional calls (status/config) fail
+- **Dynamic service discovery**: Uses gRPC reflection to discover service methods and message types
+- **Proper timeout handling**: Consistent 10-second timeouts with context cancellation
+- **Graceful error handling**: Detailed error messages and fallback parsing strategies
 - **Connection validation**: TCP connectivity test before attempting gRPC calls
 
 ## How to Extract Proto Files (for reference/future changes)
@@ -85,8 +84,9 @@ requestData := `{"get_status":{}}`
 
 ## Dependencies
 
-- Requires `grpcurl` binary to be available in PATH
-- Go gRPC dependencies (for connection management)
+- `google.golang.org/grpc` - gRPC client library
+- `google.golang.org/grpc/reflection/grpc_reflection_v1alpha` - gRPC reflection support
+- `google.golang.org/protobuf` - Protocol Buffers runtime
 
 ## Security Considerations
 
