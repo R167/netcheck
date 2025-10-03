@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/R167/netcheck/checkers/common"
 )
 
 type Output interface {
@@ -16,6 +18,7 @@ type Output interface {
 	Warning(format string, args ...interface{})
 	Error(format string, args ...interface{})
 	Detail(format string, args ...interface{})
+	Debug(format string, args ...interface{})
 	Println(s string)
 	Printf(format string, args ...interface{})
 }
@@ -72,6 +75,15 @@ func (o *StreamingOutput) Detail(format string, args ...interface{}) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	fmt.Fprintf(o.writer, "   "+format+"\n", args...)
+}
+
+func (o *StreamingOutput) Debug(format string, args ...interface{}) {
+	if !common.DebugMode {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	fmt.Fprintf(o.writer, "  🔍 [DEBUG] "+format+"\n", args...)
 }
 
 func (o *StreamingOutput) Println(s string) {
@@ -163,6 +175,18 @@ func (o *BufferedOutput) Detail(format string, args ...interface{}) {
 	})
 }
 
+func (o *BufferedOutput) Debug(format string, args ...interface{}) {
+	if !common.DebugMode {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.lines = append(o.lines, OutputLine{
+		Level:   "debug",
+		Message: fmt.Sprintf("  🔍 [DEBUG] "+format, args...),
+	})
+}
+
 func (o *BufferedOutput) Println(s string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -209,5 +233,6 @@ func (o *NoOpOutput) Success(format string, args ...interface{}) {}
 func (o *NoOpOutput) Warning(format string, args ...interface{}) {}
 func (o *NoOpOutput) Error(format string, args ...interface{})   {}
 func (o *NoOpOutput) Detail(format string, args ...interface{})  {}
+func (o *NoOpOutput) Debug(format string, args ...interface{})   {}
 func (o *NoOpOutput) Println(s string)                           {}
 func (o *NoOpOutput) Printf(format string, args ...interface{})  {}

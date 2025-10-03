@@ -1,6 +1,19 @@
 package common
 
-import "time"
+import (
+	"log"
+	"time"
+)
+
+// DebugMode controls whether debug output is printed
+var DebugMode = false
+
+// DebugLog prints debug messages if DebugMode is enabled
+func DebugLog(format string, args ...interface{}) {
+	if DebugMode {
+		log.Printf("[DEBUG] "+format, args...)
+	}
+}
 
 const (
 	SeverityCritical = "CRITICAL"
