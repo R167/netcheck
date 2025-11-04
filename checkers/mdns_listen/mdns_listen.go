@@ -292,7 +292,9 @@ func requeryServices(serviceQueries map[string]bool, out output.Output) []common
 
 	// Collect results with timeout
 	timeout := time.After(6 * time.Second)
-	for {
+	done := false
+
+	for !done {
 		select {
 		case entry := <-entriesCh:
 			if entry != nil {
@@ -338,13 +340,12 @@ func requeryServices(serviceQueries map[string]bool, out output.Output) []common
 				}
 			}
 		case <-timeout:
-			goto done
+			done = true
 		case <-ctx.Done():
-			goto done
+			done = true
 		}
 	}
 
-done:
 	// Convert map to slice
 	for _, service := range serviceMap {
 		// Try to resolve hostname if IP is missing
