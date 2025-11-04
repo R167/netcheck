@@ -8,6 +8,7 @@ import (
 	"github.com/R167/netcheck/checkers/ipv6"
 	"github.com/R167/netcheck/checkers/lldp"
 	"github.com/R167/netcheck/checkers/mdns"
+	"github.com/R167/netcheck/checkers/mdns_listen"
 	"github.com/R167/netcheck/checkers/natpmp"
 	"github.com/R167/netcheck/checkers/ports"
 	"github.com/R167/netcheck/checkers/routes"
@@ -44,6 +45,7 @@ func AllCheckers() []checker.Checker {
 		device.NewDeviceChecker(),
 		external.NewExternalChecker(),
 		lldp.NewLLDPChecker(),
+		mdns_listen.NewMDNSListenChecker(),
 	}
 }
 
