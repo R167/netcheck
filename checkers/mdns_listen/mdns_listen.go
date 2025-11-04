@@ -1,11 +1,17 @@
 package mdns_listen
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
+	"log"
 	"net"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/hashicorp/mdns"
 
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
@@ -16,6 +22,7 @@ type MDNSListenChecker struct{}
 
 type MDNSListenConfig struct {
 	Timeout time.Duration
+	ReQuery bool // If true, actively query for services discovered in queries
 }
 
 // MDNSQuery represents a captured mDNS query
@@ -44,6 +51,7 @@ func (c *MDNSListenChecker) Icon() string {
 func (c *MDNSListenChecker) DefaultConfig() checker.CheckerConfig {
 	return MDNSListenConfig{
 		Timeout: 10 * time.Second,
+		ReQuery: false,
 	}
 }
 
@@ -79,6 +87,11 @@ func (c *MDNSListenChecker) MCPToolDefinition() *checker.MCPTool {
 					"type":        "number",
 					"description": "Listening timeout in seconds",
 					"default":     10,
+				},
+				"requery": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Actively query for services discovered in captured queries",
+					"default":     false,
 				},
 			},
 			"required": []string{},
@@ -143,6 +156,9 @@ func listenForMDNSQueries(cfg MDNSListenConfig, out output.Output) {
 
 	out.Info("Detected mDNS queries from %d source(s)", len(queries))
 
+	// Collect all unique service queries across all sources
+	allUniqueQuestions := make(map[string]bool)
+
 	for sourceIP, query := range queries {
 		out.Info("")
 		out.Info("Source: %s", sourceIP)
@@ -151,6 +167,7 @@ func listenForMDNSQueries(cfg MDNSListenConfig, out output.Output) {
 		uniqueQuestions := make(map[string]bool)
 		for _, q := range query.Questions {
 			uniqueQuestions[q] = true
+			allUniqueQuestions[q] = true
 		}
 
 		if len(uniqueQuestions) > 0 {
@@ -158,6 +175,31 @@ func listenForMDNSQueries(cfg MDNSListenConfig, out output.Output) {
 			for q := range uniqueQuestions {
 				out.Info("    • %s", q)
 			}
+		}
+	}
+
+	// If ReQuery is enabled, actively discover these services
+	if cfg.ReQuery && len(allUniqueQuestions) > 0 {
+		out.Info("")
+		out.Section("🔍", "Re-querying discovered services...")
+		discoveredServices := requeryServices(allUniqueQuestions, out)
+
+		if len(discoveredServices) > 0 {
+			out.Info("Found %d responding device(s):", len(discoveredServices))
+			for _, service := range discoveredServices {
+				if service.IP != "" && service.Port > 0 {
+					out.Info("  🖥️  %s (%s) at %s:%d", service.Name, service.Type, service.IP, service.Port)
+					if len(service.TXTData) > 0 {
+						out.Info("      TXT: %s", strings.Join(service.TXTData, ", "))
+					}
+				} else if service.IP != "" {
+					out.Info("  🖥️  %s (%s) at %s", service.Name, service.Type, service.IP)
+				} else {
+					out.Info("  🖥️  %s (%s)", service.Name, service.Type)
+				}
+			}
+		} else {
+			out.Info("No devices responded to the queried services")
 		}
 	}
 
@@ -172,6 +214,152 @@ func listenForMDNSQueries(cfg MDNSListenConfig, out output.Output) {
 	out.Info("   • Review which devices are performing service discovery")
 	out.Info("   • Unexpected queries may indicate unauthorized devices or malware")
 	out.Info("   • Consider network segmentation for sensitive devices")
+}
+
+// requeryServices actively queries for the services discovered during passive listening
+func requeryServices(serviceQueries map[string]bool, out output.Output) []common.MDNSService {
+	// Suppress mdns library log output
+	log.SetOutput(io.Discard)
+	defer log.SetOutput(os.Stderr)
+
+	var services []common.MDNSService
+	serviceMap := make(map[string]*common.MDNSService)
+
+	// Set up context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	// Channel to collect results
+	entriesCh := make(chan *mdns.ServiceEntry, 100)
+
+	// Query each service that was discovered in queries
+	queriedServices := make([]string, 0, len(serviceQueries))
+	for serviceName := range serviceQueries {
+		queriedServices = append(queriedServices, serviceName)
+	}
+
+	out.Info("Actively querying %d unique service(s)...", len(queriedServices))
+
+	for _, serviceName := range queriedServices {
+		// Parse the service name to extract service type and domain
+		// Format can be: "_http._tcp.local", "device.local", etc.
+		cleanServiceName := serviceName
+
+		// Determine if this is a service type query or hostname query
+		var serviceType string
+		var domain string
+
+		if strings.Contains(serviceName, "._tcp.") || strings.Contains(serviceName, "._udp.") {
+			// This is a service type query (e.g., "_http._tcp.local")
+			// Remove .local suffix for hashicorp/mdns
+			cleanServiceName = strings.TrimSuffix(serviceName, ".local")
+
+			// Split into service type and domain
+			parts := strings.Split(cleanServiceName, ".")
+			if len(parts) >= 2 {
+				// Reconstruct service type (e.g., "_http._tcp")
+				serviceType = strings.Join(parts[:len(parts)], ".")
+				domain = "local"
+			} else {
+				serviceType = cleanServiceName
+				domain = "local"
+			}
+		} else if strings.HasSuffix(serviceName, ".local") {
+			// This is a hostname query (e.g., "mydevice.local")
+			// We can try to discover it using the generic service query
+			hostname := strings.TrimSuffix(serviceName, ".local")
+			serviceType = hostname
+			domain = "local"
+		} else {
+			// Unknown format, skip
+			continue
+		}
+
+		// Launch goroutine to query this service
+		go func(stype, originalName string) {
+			params := &mdns.QueryParam{
+				Service:             stype,
+				Domain:              domain,
+				Timeout:             2 * time.Second,
+				Entries:             entriesCh,
+				WantUnicastResponse: false,
+			}
+			if err := mdns.Query(params); err != nil {
+				// Silently continue on error
+			}
+		}(serviceType, serviceName)
+	}
+
+	// Collect results with timeout
+	timeout := time.After(6 * time.Second)
+	for {
+		select {
+		case entry := <-entriesCh:
+			if entry != nil {
+				// Create unique key to avoid duplicates
+				var ip string
+				if entry.AddrV4 != nil {
+					ip = entry.AddrV4.String()
+				} else if entry.AddrV6 != nil {
+					ip = entry.AddrV6.String()
+				}
+
+				key := fmt.Sprintf("%s:%s:%d", entry.Name, ip, entry.Port)
+
+				// Only add if it's a new service or we have better information
+				if existingService, exists := serviceMap[key]; !exists || existingService.IP == "" {
+					var txtData []string
+					if entry.Info != "" {
+						txtData = strings.Split(entry.Info, "\n")
+					}
+
+					// Try to match the service type from our original queries
+					matchedType := "_unknown._tcp.local"
+					for originalService := range serviceQueries {
+						if strings.Contains(entry.Name, strings.TrimSuffix(originalService, ".local")) ||
+							strings.Contains(originalService, strings.TrimSuffix(entry.Name, ".local")) {
+							matchedType = originalService
+							break
+						}
+					}
+
+					service := &common.MDNSService{
+						Name:    entry.Name,
+						Type:    matchedType,
+						IP:      ip,
+						Port:    entry.Port,
+						TXTData: txtData,
+					}
+
+					// Only add services with valid information
+					if service.Name != "" && (service.IP != "" || service.Port > 0) {
+						serviceMap[key] = service
+					}
+				}
+			}
+		case <-timeout:
+			goto done
+		case <-ctx.Done():
+			goto done
+		}
+	}
+
+done:
+	// Convert map to slice
+	for _, service := range serviceMap {
+		// Try to resolve hostname if IP is missing
+		if service.IP == "0.0.0.0" || service.IP == "" {
+			if service.Name != "" {
+				if ips, err := net.LookupIP(service.Name); err == nil && len(ips) > 0 {
+					service.IP = ips[0].String()
+				}
+			}
+		}
+
+		services = append(services, *service)
+	}
+
+	return services
 }
 
 // parseMDNSPacket parses a DNS packet and extracts query information
