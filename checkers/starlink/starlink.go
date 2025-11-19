@@ -71,7 +71,7 @@ func (c *StarlinkChecker) MCPToolDefinition() *checker.MCPTool {
 
 func checkStarlink(router *common.RouterInfo, out output.Output) {
 	out.Section("🛰️", "Checking for Starlink Dishy...")
-	starlinkInfo := starlinklib.CheckStarlink()
+	starlinkInfo := starlinklib.CheckStarlink(out)
 	router.Starlink = starlinkInfo
 
 	if starlinkInfo.Accessible {
