@@ -1,6 +1,6 @@
 module github.com/R167/netcheck
 
-go 1.25.1
+go 1.24.7
 
 require (
 	github.com/hashicorp/mdns v1.0.6
