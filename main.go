@@ -64,7 +64,7 @@ func main() {
 
 	// Enable debug mode if requested
 	if *debugFlag {
-		common.DebugMode = true
+		common.SetDebugMode(true)
 	}
 
 	if *mcpFlag {

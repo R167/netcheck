@@ -2,15 +2,26 @@ package common
 
 import (
 	"log"
+	"sync/atomic"
 	"time"
 )
 
-// DebugMode controls whether debug output is printed
-var DebugMode = false
+// debugMode controls whether debug output is printed (use atomic for thread-safety)
+var debugMode atomic.Bool
+
+// SetDebugMode enables or disables debug output in a thread-safe manner
+func SetDebugMode(enabled bool) {
+	debugMode.Store(enabled)
+}
+
+// IsDebugMode returns whether debug mode is enabled
+func IsDebugMode() bool {
+	return debugMode.Load()
+}
 
 // DebugLog prints debug messages if DebugMode is enabled
 func DebugLog(format string, args ...interface{}) {
-	if DebugMode {
+	if debugMode.Load() {
 		log.Printf("[DEBUG] "+format, args...)
 	}
 }
