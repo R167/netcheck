@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sync"
 
 	"github.com/R167/netcheck/internal/output"
 	"google.golang.org/grpc"
@@ -24,6 +25,10 @@ type Client struct {
 	conn       *grpc.ClientConn
 	reflClient grpc_reflection_v1alpha.ServerReflectionClient
 	out        output.Output
+
+	// Cached service descriptor to avoid repeated reflection calls
+	serviceDescMu sync.RWMutex
+	serviceDesc   protoreflect.ServiceDescriptor
 }
 
 // NewClient creates a new Starlink client
@@ -72,6 +77,35 @@ func (c *Client) IsAccessible() bool {
 	return err == nil
 }
 
+// getServiceDescriptor returns a cached service descriptor or resolves it
+func (c *Client) getServiceDescriptor(ctx context.Context) (protoreflect.ServiceDescriptor, error) {
+	// Check cache first with read lock
+	c.serviceDescMu.RLock()
+	if c.serviceDesc != nil {
+		desc := c.serviceDesc
+		c.serviceDescMu.RUnlock()
+		c.out.Debug("getServiceDescriptor: Using cached service descriptor")
+		return desc, nil
+	}
+	c.serviceDescMu.RUnlock()
+
+	// Resolve and cache with write lock
+	c.serviceDescMu.Lock()
+	defer c.serviceDescMu.Unlock()
+
+	// Double-check after acquiring write lock
+	if c.serviceDesc != nil {
+		return c.serviceDesc, nil
+	}
+
+	desc, err := c.resolveService(ctx, "SpaceX.API.Device.Device")
+	if err != nil {
+		return nil, err
+	}
+	c.serviceDesc = desc
+	return desc, nil
+}
+
 // GetDeviceInfo retrieves device information using native gRPC with reflection
 func (c *Client) GetDeviceInfo() (*DeviceInfo, error) {
 	c.out.Debug("GetDeviceInfo: Starting device info retrieval")
@@ -80,7 +114,7 @@ func (c *Client) GetDeviceInfo() (*DeviceInfo, error) {
 
 	// Get the service descriptor for SpaceX.API.Device.Device
 	c.out.Debug("GetDeviceInfo: Resolving service descriptor")
-	serviceDesc, err := c.resolveService(ctx, "SpaceX.API.Device.Device")
+	serviceDesc, err := c.getServiceDescriptor(ctx)
 	if err != nil {
 		c.out.Debug("GetDeviceInfo: Failed to resolve service: %v", err)
 		return nil, fmt.Errorf("failed to resolve service: %w", err)
@@ -145,14 +179,212 @@ func (c *Client) GetDeviceInfo() (*DeviceInfo, error) {
 
 // GetStatus retrieves status information
 func (c *Client) GetStatus() (*DishStatus, error) {
-	// Return empty status for now - could implement similar to GetDeviceInfo
-	return &DishStatus{}, nil
+	c.out.Debug("GetStatus: Starting status retrieval")
+	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
+
+	serviceDesc, err := c.getServiceDescriptor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve service: %w", err)
+	}
+
+	handleMethod := serviceDesc.Methods().ByName("Handle")
+	if handleMethod == nil {
+		return nil, fmt.Errorf("Handle method not found")
+	}
+
+	reqDesc := handleMethod.Input()
+	respDesc := handleMethod.Output()
+
+	req := dynamicpb.NewMessage(reqDesc)
+
+	// Find the get_status field
+	getStatusField := reqDesc.Fields().ByName("get_status")
+	if getStatusField == nil {
+		c.out.Debug("GetStatus: get_status field not found")
+		return nil, fmt.Errorf("get_status field not found in request message")
+	}
+
+	getStatusMsg := dynamicpb.NewMessage(getStatusField.Message())
+	req.Set(getStatusField, protoreflect.ValueOfMessage(getStatusMsg))
+
+	resp := dynamicpb.NewMessage(respDesc)
+	err = c.conn.Invoke(ctx, "/SpaceX.API.Device.Device/Handle", req, resp)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC invocation failed: %w", err)
+	}
+
+	return c.parseStatusResponse(resp)
 }
 
 // GetConfig retrieves configuration
 func (c *Client) GetConfig() (*DishConfig, error) {
-	// Return empty config for now - could implement similar to GetDeviceInfo
-	return &DishConfig{}, nil
+	c.out.Debug("GetConfig: Starting config retrieval")
+	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
+
+	serviceDesc, err := c.getServiceDescriptor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve service: %w", err)
+	}
+
+	handleMethod := serviceDesc.Methods().ByName("Handle")
+	if handleMethod == nil {
+		return nil, fmt.Errorf("Handle method not found")
+	}
+
+	reqDesc := handleMethod.Input()
+	respDesc := handleMethod.Output()
+
+	req := dynamicpb.NewMessage(reqDesc)
+
+	// Find the dish_get_config field
+	getConfigField := reqDesc.Fields().ByName("dish_get_config")
+	if getConfigField == nil {
+		c.out.Debug("GetConfig: dish_get_config field not found")
+		return nil, fmt.Errorf("dish_get_config field not found in request message")
+	}
+
+	getConfigMsg := dynamicpb.NewMessage(getConfigField.Message())
+	req.Set(getConfigField, protoreflect.ValueOfMessage(getConfigMsg))
+
+	resp := dynamicpb.NewMessage(respDesc)
+	err = c.conn.Invoke(ctx, "/SpaceX.API.Device.Device/Handle", req, resp)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC invocation failed: %w", err)
+	}
+
+	return c.parseConfigResponse(resp)
+}
+
+// parseStatusResponse parses the status from the dynamic response message
+func (c *Client) parseStatusResponse(resp protoreflect.Message) (*DishStatus, error) {
+	jsonBytes, err := protojson.Marshal(resp.Interface())
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal response to JSON: %w", err)
+	}
+
+	var rawResp map[string]interface{}
+	if err := json.Unmarshal(jsonBytes, &rawResp); err != nil {
+		return nil, fmt.Errorf("failed to parse status response: %w", err)
+	}
+
+	// Try to extract status from the response
+	if dishGetStatus, ok := rawResp["dishGetStatus"].(map[string]interface{}); ok {
+		return parseStatus(dishGetStatus), nil
+	}
+
+	return nil, fmt.Errorf("status not found in response")
+}
+
+// parseStatus parses DishStatus from JSON map
+func parseStatus(data map[string]interface{}) *DishStatus {
+	result := &DishStatus{}
+
+	if deviceState, ok := data["deviceState"].(map[string]interface{}); ok {
+		if uptimeStr, ok := deviceState["uptimeS"].(string); ok {
+			var uptime int64
+			fmt.Sscanf(uptimeStr, "%d", &uptime)
+			result.UptimeS = uptime
+		}
+	}
+
+	if v, ok := data["downlinkThroughputBps"].(float64); ok {
+		result.DownlinkThroughputBps = v
+	}
+	if v, ok := data["uplinkThroughputBps"].(float64); ok {
+		result.UplinkThroughputBps = v
+	}
+	if v, ok := data["popPingLatencyMs"].(float64); ok {
+		result.PopPingLatencyMs = v
+	}
+	if v, ok := data["boresightAzimuthDeg"].(float64); ok {
+		result.BoresightAzimuthDeg = v
+	}
+	if v, ok := data["boresightElevationDeg"].(float64); ok {
+		result.BoresightElevationDeg = v
+	}
+	if v, ok := data["ethSpeedMbps"].(float64); ok {
+		result.EthSpeedMbps = int(v)
+	}
+	if routers, ok := data["connectedRouters"].([]interface{}); ok {
+		for _, r := range routers {
+			if s, ok := r.(string); ok {
+				result.ConnectedRouters = append(result.ConnectedRouters, s)
+			}
+		}
+	}
+	if v, ok := data["hasActuators"].(string); ok {
+		result.HasActuators = v
+	}
+	if v, ok := data["disablementCode"].(string); ok {
+		result.DisablementCode = v
+	}
+	if v, ok := data["softwareUpdateState"].(string); ok {
+		result.SoftwareUpdateState = v
+	}
+
+	return result
+}
+
+// parseConfigResponse parses the config from the dynamic response message
+func (c *Client) parseConfigResponse(resp protoreflect.Message) (*DishConfig, error) {
+	jsonBytes, err := protojson.Marshal(resp.Interface())
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal response to JSON: %w", err)
+	}
+
+	var rawResp map[string]interface{}
+	if err := json.Unmarshal(jsonBytes, &rawResp); err != nil {
+		return nil, fmt.Errorf("failed to parse config response: %w", err)
+	}
+
+	// Try to extract config from the response
+	if dishGetConfig, ok := rawResp["dishGetConfig"].(map[string]interface{}); ok {
+		if dishConfig, ok := dishGetConfig["dishConfig"].(map[string]interface{}); ok {
+			return parseConfig(dishConfig), nil
+		}
+	}
+
+	return nil, fmt.Errorf("config not found in response")
+}
+
+// parseConfig parses DishConfig from JSON map
+func parseConfig(data map[string]interface{}) *DishConfig {
+	result := &DishConfig{}
+
+	if v, ok := data["swupdateRebootHour"].(float64); ok {
+		result.SwupdateRebootHour = int(v)
+	}
+	if v, ok := data["applySnowMeltMode"].(bool); ok {
+		result.ApplySnowMeltMode = v
+	}
+	if v, ok := data["applyLocationRequestMode"].(bool); ok {
+		result.ApplyLocationRequestMode = v
+	}
+	if v, ok := data["applyLevelDishMode"].(bool); ok {
+		result.ApplyLevelDishMode = v
+	}
+	if v, ok := data["applyPowerSaveStartMinutes"].(bool); ok {
+		result.ApplyPowerSaveStartMinutes = v
+	}
+	if v, ok := data["applyPowerSaveDurationMinutes"].(bool); ok {
+		result.ApplyPowerSaveDurationMinutes = v
+	}
+	if v, ok := data["applyPowerSaveMode"].(bool); ok {
+		result.ApplyPowerSaveMode = v
+	}
+	if v, ok := data["applySwupdateThreeDayDeferralEnabled"].(bool); ok {
+		result.ApplySwupdateThreeDayDeferralEnabled = v
+	}
+	if v, ok := data["applyAssetClass"].(bool); ok {
+		result.ApplyAssetClass = v
+	}
+	if v, ok := data["applySwupdateRebootHour"].(bool); ok {
+		result.ApplySwupdateRebootHour = v
+	}
+
+	return result
 }
 
 // resolveService uses gRPC reflection to get the service descriptor

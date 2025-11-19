@@ -78,7 +78,7 @@ func (o *StreamingOutput) Detail(format string, args ...interface{}) {
 }
 
 func (o *StreamingOutput) Debug(format string, args ...interface{}) {
-	if !common.DebugMode {
+	if !common.IsDebugMode() {
 		return
 	}
 	o.mu.Lock()
@@ -176,7 +176,7 @@ func (o *BufferedOutput) Detail(format string, args ...interface{}) {
 }
 
 func (o *BufferedOutput) Debug(format string, args ...interface{}) {
-	if !common.DebugMode {
+	if !common.IsDebugMode() {
 		return
 	}
 	o.mu.Lock()
