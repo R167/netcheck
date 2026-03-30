@@ -177,12 +177,12 @@ func TestParseHexIP(t *testing.T) {
 		hex  string
 		want string
 	}{
-		{"0101A8C0", "192.168.1.1"},   // 192.168.1.1 in little-endian
+		{"0101A8C0", "192.168.1.1"}, // 192.168.1.1 in little-endian
 		{"00000000", "0.0.0.0"},
-		{"0100007F", "127.0.0.1"},     // localhost in little-endian
-		{"", ""},                       // empty
-		{"ZZZZ", ""},                   // invalid hex
-		{"0102", ""},                   // too short
+		{"0100007F", "127.0.0.1"}, // localhost in little-endian
+		{"", ""},                  // empty
+		{"ZZZZ", ""},              // invalid hex
+		{"0102", ""},              // too short
 	}
 	for _, tt := range tests {
 		got := parseHexIP(tt.hex)
