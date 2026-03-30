@@ -48,6 +48,9 @@ func discoverFromProcRoute() string {
 		}
 		return parseHexIP(gateway)
 	}
+	if err := scanner.Err(); err != nil {
+		return ""
+	}
 	return ""
 }
 

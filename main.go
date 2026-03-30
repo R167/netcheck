@@ -18,6 +18,8 @@ import (
 	"golang.org/x/text/language"
 )
 
+var titleCaser = cases.Title(language.English)
+
 var (
 	// Test category flags
 	allFlag      = flag.Bool("all", false, "Run all available tests")
@@ -194,7 +196,7 @@ func generateReport(router *common.RouterInfo) {
 	fmt.Println("=============================")
 
 	if router.Vendor != "" {
-		fmt.Printf("Vendor: %s\n", cases.Title(language.English).String(router.Vendor))
+		fmt.Printf("Vendor: %s\n", titleCaser.String(router.Vendor))
 	}
 	if router.Model != "" {
 		fmt.Printf("Model: %s\n", router.Model)

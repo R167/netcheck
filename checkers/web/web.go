@@ -15,6 +15,8 @@ import (
 	"golang.org/x/text/language"
 )
 
+var titleCaser = cases.Title(language.English)
+
 type WebChecker struct{}
 
 type WebConfig struct {
@@ -248,7 +250,7 @@ func detectVendor(router *common.RouterInfo, content string, out output.Output) 
 	for vendor, pattern := range vendorPatterns {
 		if pattern.MatchString(content) {
 			router.Vendor = vendor
-			out.Info("📱 Detected vendor: %s", cases.Title(language.English).String(vendor))
+			out.Info("📱 Detected vendor: %s", titleCaser.String(vendor))
 			break
 		}
 	}

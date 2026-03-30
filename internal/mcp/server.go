@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -62,7 +61,7 @@ func registerChecker(server *mcpsdk.Server, c checker.Checker) {
 		buf := output.NewBufferedOutput()
 		router := newRouterInfo(input.GatewayIP)
 
-		cfg := c.DefaultConfig()
+		cfg := configFromInput(checkerName, c.DefaultConfig(), input)
 
 		if requiresRouter {
 			if input.GatewayIP == "" {
@@ -73,29 +72,16 @@ func registerChecker(server *mcpsdk.Server, c checker.Checker) {
 			c.RunStandalone(cfg, buf)
 		}
 
-		result := buildToolOutput(router, buf)
+		var result ToolOutput
+		if requiresRouter {
+			result = buildToolOutput(router, buf)
+		} else {
+			result = buildStandaloneOutput(buf)
+		}
 		result.Summary = fmt.Sprintf("%s: found %d issues", checkerName, len(result.Issues))
+		populateServices(&result, router)
 
-		// Populate service-specific fields.
-		if len(router.MDNSServices) > 0 {
-			result.Services = append(result.Services, ServicesFromMDNS(router.MDNSServices)...)
-		}
-		if len(router.SSDPServices) > 0 {
-			result.Services = append(result.Services, ServicesFromSSDP(router.SSDPServices)...)
-		}
-		if len(router.UPnPServices) > 0 {
-			result.Services = append(result.Services, ServicesFromUPnP(router.UPnPServices)...)
-		}
-		if len(router.PortMappings) > 0 {
-			result.PortMappings = router.PortMappings
-		}
-
-		text := formatResultAsText(result)
-		return &mcpsdk.CallToolResult{
-			Content: []mcpsdk.Content{
-				&mcpsdk.TextContent{Text: text},
-			},
-		}, result, nil
+		return textResult(result)
 	})
 }
 
@@ -108,12 +94,8 @@ func registerDiscoverNetwork(server *mcpsdk.Server, cfg ServerConfig) {
 	}, func(ctx context.Context, req *mcpsdk.CallToolRequest, input ToolInput) (*mcpsdk.CallToolResult, ToolOutput, error) {
 		gatewayIP := cfg.DiscoverGateway()
 
-		gateway := &GatewayInfo{
-			IP: gatewayIP,
-		}
-
 		result := ToolOutput{
-			Gateway: gateway,
+			Gateway: &GatewayInfo{IP: gatewayIP},
 		}
 
 		if gatewayIP == "" {
@@ -122,12 +104,7 @@ func registerDiscoverNetwork(server *mcpsdk.Server, cfg ServerConfig) {
 			result.Summary = fmt.Sprintf("Gateway discovered at %s", gatewayIP)
 		}
 
-		text := formatResultAsText(result)
-		return &mcpsdk.CallToolResult{
-			Content: []mcpsdk.Content{
-				&mcpsdk.TextContent{Text: text},
-			},
-		}, result, nil
+		return textResult(result)
 	})
 }
 
@@ -169,32 +146,24 @@ func registerFullScan(server *mcpsdk.Server, cfg ServerConfig) {
 		}
 
 		result := buildToolOutput(router, buf)
-
-		// Populate service-specific fields.
-		if len(router.MDNSServices) > 0 {
-			result.Services = append(result.Services, ServicesFromMDNS(router.MDNSServices)...)
-		}
-		if len(router.SSDPServices) > 0 {
-			result.Services = append(result.Services, ServicesFromSSDP(router.SSDPServices)...)
-		}
-		if len(router.UPnPServices) > 0 {
-			result.Services = append(result.Services, ServicesFromUPnP(router.UPnPServices)...)
-		}
-		if len(router.PortMappings) > 0 {
-			result.PortMappings = router.PortMappings
-		}
+		populateServices(&result, router)
 
 		issueCount := len(result.Issues)
 		serviceCount := len(result.Services)
 		result.Summary = fmt.Sprintf("Full scan complete: %d issues, %d services discovered", issueCount, serviceCount)
 
-		text := formatResultAsText(result)
-		return &mcpsdk.CallToolResult{
-			Content: []mcpsdk.Content{
-				&mcpsdk.TextContent{Text: text},
-			},
-		}, result, nil
+		return textResult(result)
 	})
+}
+
+// textResult wraps a ToolOutput into the MCP return triple.
+func textResult(result ToolOutput) (*mcpsdk.CallToolResult, ToolOutput, error) {
+	text := formatResultAsText(result)
+	return &mcpsdk.CallToolResult{
+		Content: []mcpsdk.Content{
+			&mcpsdk.TextContent{Text: text},
+		},
+	}, result, nil
 }
 
 // newRouterInfo creates a properly initialized RouterInfo.
@@ -220,6 +189,29 @@ func buildToolOutput(router *common.RouterInfo, buf *output.BufferedOutput) Tool
 	}
 }
 
+// buildStandaloneOutput creates a ToolOutput with no router state.
+func buildStandaloneOutput(buf *output.BufferedOutput) ToolOutput {
+	return ToolOutput{
+		Log: renderBufferedOutput(buf),
+	}
+}
+
+// populateServices fills service and port mapping fields from router state.
+func populateServices(result *ToolOutput, router *common.RouterInfo) {
+	if len(router.MDNSServices) > 0 {
+		result.Services = append(result.Services, ServicesFromMDNS(router.MDNSServices)...)
+	}
+	if len(router.SSDPServices) > 0 {
+		result.Services = append(result.Services, ServicesFromSSDP(router.SSDPServices)...)
+	}
+	if len(router.UPnPServices) > 0 {
+		result.Services = append(result.Services, ServicesFromUPnP(router.UPnPServices)...)
+	}
+	if len(router.PortMappings) > 0 {
+		result.PortMappings = router.PortMappings
+	}
+}
+
 // renderBufferedOutput converts buffered output lines to a single string.
 func renderBufferedOutput(buf *output.BufferedOutput) string {
 	lines := buf.Lines()
@@ -230,7 +222,7 @@ func renderBufferedOutput(buf *output.BufferedOutput) string {
 	return strings.Join(parts, "\n")
 }
 
-// formatResultAsText creates a human+machine readable summary for MCP text content.
+// formatResultAsText creates a human-readable summary for MCP text content.
 func formatResultAsText(result ToolOutput) string {
 	var sb strings.Builder
 
@@ -296,11 +288,10 @@ func formatResultAsText(result ToolOutput) string {
 		sb.WriteString("\n")
 	}
 
-	// Append structured JSON for machine consumption.
-	jsonBytes, err := json.Marshal(result)
-	if err == nil {
-		sb.WriteString("---\n")
-		sb.WriteString(string(jsonBytes))
+	if result.Log != "" {
+		sb.WriteString("## Details\n")
+		sb.WriteString(result.Log)
+		sb.WriteString("\n")
 	}
 
 	return sb.String()
