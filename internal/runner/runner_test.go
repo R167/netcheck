@@ -160,12 +160,7 @@ func TestDiscoverGateway_Format(t *testing.T) {
 		t.Skip("Gateway discovery failed (acceptable in test environments)")
 	}
 
-	// Should end with .1 if discovery succeeded
-	if gateway[len(gateway)-2:] != ".1" {
-		t.Errorf("DiscoverGateway() = %q, should end with '.1'", gateway)
-	}
-
-	// Should have exactly 4 octets
+	// Should be a valid IPv4 address with exactly 4 octets
 	parts := 0
 	for _, ch := range gateway {
 		if ch == '.' {
@@ -174,5 +169,25 @@ func TestDiscoverGateway_Format(t *testing.T) {
 	}
 	if parts != 3 {
 		t.Errorf("DiscoverGateway() = %q, should have 3 dots (4 octets)", gateway)
+	}
+}
+
+func TestParseHexIP(t *testing.T) {
+	tests := []struct {
+		hex  string
+		want string
+	}{
+		{"0101A8C0", "192.168.1.1"},   // 192.168.1.1 in little-endian
+		{"00000000", "0.0.0.0"},
+		{"0100007F", "127.0.0.1"},     // localhost in little-endian
+		{"", ""},                       // empty
+		{"ZZZZ", ""},                   // invalid hex
+		{"0102", ""},                   // too short
+	}
+	for _, tt := range tests {
+		got := parseHexIP(tt.hex)
+		if got != tt.want {
+			t.Errorf("parseHexIP(%q) = %q, want %q", tt.hex, got, tt.want)
+		}
 	}
 }

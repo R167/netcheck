@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Launch Claude Code with netcheck as an MCP server for interactive network investigation.
+# Usage: ./neti [claude-code args...]
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec claude --mcp-server "netcheck:${SCRIPT_DIR}/netcheck --mcp" --allowedTools "mcp__netcheck__discover_network,mcp__netcheck__full_scan,mcp__netcheck__check_web_interface,mcp__netcheck__scan_ports,mcp__netcheck__check_upnp,mcp__netcheck__check_natpmp,mcp__netcheck__check_ipv6,mcp__netcheck__check_mdns,mcp__netcheck__discover_ssdp_services,mcp__netcheck__check_api,mcp__netcheck__check_starlink,mcp__netcheck__check_routes,mcp__netcheck__check_device,mcp__netcheck__check_external,mcp__netcheck__check_lldp" -p "You are a network security investigator. Use the netcheck MCP tools to thoroughly assess this network. Start with discover_network to find the gateway, then run targeted checks based on what you find. Explain findings clearly and suggest remediations." "$@"

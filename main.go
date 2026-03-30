@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/R167/netcheck/checkers"
@@ -15,21 +14,8 @@ import (
 	"github.com/R167/netcheck/internal/output"
 	"github.com/R167/netcheck/internal/runner"
 	"github.com/R167/netcheck/starlink"
-)
-
-// Severity levels for security issues
-const (
-	SeverityCritical = "CRITICAL"
-	SeverityHigh     = "HIGH"
-	SeverityMedium   = "MEDIUM"
-	SeverityLow      = "LOW"
-)
-
-// Common timeouts
-const (
-	HTTPTimeout   = 5 * time.Second
-	PortTimeout   = 1 * time.Second // Reduced from 2s for faster scanning on restricted networks
-	NATpmpTimeout = 3 * time.Second
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var (
@@ -56,7 +42,7 @@ var (
 	debugFlag       = flag.Bool("debug", false, "Enable debug output for troubleshooting")
 	timeoutFlag     = flag.Duration("timeout", 60*time.Second, "Maximum time to run all tests (e.g. 30s, 2m, 1h)")
 	showVirtualFlag = flag.Bool("show-virtual", false, "Show virtual network interfaces (VPN tunnels, Docker bridges, etc.)")
-	portTimeoutFlag = flag.Duration("port-timeout", PortTimeout, "Timeout for individual port scans (e.g. 500ms, 1s, 2s)")
+	portTimeoutFlag = flag.Duration("port-timeout", common.PortTimeout, "Timeout for individual port scans (e.g. 500ms, 1s, 2s)")
 )
 
 func main() {
@@ -76,12 +62,11 @@ func main() {
 }
 
 func runMCPMode() {
-	registry := mcp.NewCheckerRegistry()
-
-	registry.Register("check_web_interface", adaptWebCheck)
-	registry.Register("scan_ports", adaptPortScan)
-
-	if err := mcp.RunServer(registry); err != nil {
+	cfg := mcp.ServerConfig{
+		AllCheckers:     checkers.AllCheckers,
+		DiscoverGateway: runner.DiscoverGateway,
+	}
+	if err := mcp.RunServer(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "MCP server error: %v\n", err)
 		os.Exit(1)
 	}
@@ -209,7 +194,7 @@ func generateReport(router *common.RouterInfo) {
 	fmt.Println("=============================")
 
 	if router.Vendor != "" {
-		fmt.Printf("Vendor: %s\n", strings.Title(router.Vendor))
+		fmt.Printf("Vendor: %s\n", cases.Title(language.English).String(router.Vendor))
 	}
 	if router.Model != "" {
 		fmt.Printf("Model: %s\n", router.Model)

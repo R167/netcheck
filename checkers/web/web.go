@@ -11,6 +11,8 @@ import (
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
 	"github.com/R167/netcheck/internal/output"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type WebChecker struct{}
@@ -246,7 +248,7 @@ func detectVendor(router *common.RouterInfo, content string, out output.Output) 
 	for vendor, pattern := range vendorPatterns {
 		if pattern.MatchString(content) {
 			router.Vendor = vendor
-			out.Info("📱 Detected vendor: %s", strings.Title(vendor))
+			out.Info("📱 Detected vendor: %s", cases.Title(language.English).String(vendor))
 			break
 		}
 	}
