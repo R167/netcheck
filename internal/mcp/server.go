@@ -218,12 +218,18 @@ func populateServices(result *ToolOutput, router *common.RouterInfo) {
 	}
 }
 
-// renderBufferedOutput converts buffered output lines to a single string.
+// renderBufferedOutput converts buffered output lines to a single string,
+// preserving the severity level as a prefix for non-info lines.
 func renderBufferedOutput(buf *output.BufferedOutput) string {
 	lines := buf.Lines()
-	parts := make([]string, len(lines))
-	for i, line := range lines {
-		parts[i] = line.Message
+	parts := make([]string, 0, len(lines))
+	for _, line := range lines {
+		switch line.Level {
+		case "warning", "error":
+			parts = append(parts, fmt.Sprintf("[%s] %s", strings.ToUpper(line.Level), line.Message))
+		default:
+			parts = append(parts, line.Message)
+		}
 	}
 	return strings.Join(parts, "\n")
 }
@@ -325,7 +331,6 @@ func discoverInterfaces() []NetIf {
 		result = append(result, NetIf{
 			Name:  iface.Name,
 			Addrs: addrStrs,
-			MAC:   iface.HardwareAddr.String(),
 			Flags: iface.Flags.String(),
 		})
 	}
