@@ -4,8 +4,22 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BINARY="${SCRIPT_DIR}/netcheck"
-if [[ ! -x "$BINARY" ]]; then
-  echo "netcheck binary not found. Building..." >&2
+
+# Build if missing or out of date
+if [[ ! -x "$BINARY" ]] || [[ -n "$(find "$SCRIPT_DIR" -name '*.go' -newer "$BINARY" 2>/dev/null)" ]]; then
+  echo "Building netcheck..." >&2
   (cd "$SCRIPT_DIR" && go build -o netcheck .) || { echo "Build failed" >&2; exit 1; }
 fi
-exec claude --mcp-server "netcheck:${BINARY} --mcp" --allowedTools "mcp__netcheck__*" -p "You are a network security investigator. Use the netcheck MCP tools to thoroughly assess this network. Start with discover_network to find the gateway, then run targeted checks based on what you find. Explain findings clearly and suggest remediations." "$@"
+
+CLAUDE_ARGS=(
+  --mcp-config "{\"mcpServers\":{\"netcheck\":{\"command\":\"${BINARY}\",\"args\":[\"--mcp\"]}}}"
+  --allowedTools "mcp__netcheck__*"
+  --system-prompt "You are a network security investigator. Use the netcheck MCP tools to thoroughly assess this network."
+)
+
+# If no args provided, pass a default prompt
+if [[ $# -eq 0 ]]; then
+  exec claude "${CLAUDE_ARGS[@]}" "Assess this network's security. Start with discover_network to find the gateway, then run targeted checks based on what you find. Explain findings clearly and suggest remediations."
+else
+  exec claude "${CLAUDE_ARGS[@]}" "$@"
+fi
