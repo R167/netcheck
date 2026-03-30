@@ -6,6 +6,8 @@ import (
 	"log"
 	"strings"
 
+	"net"
+
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/internal/checker"
 	"github.com/R167/netcheck/internal/output"
@@ -75,11 +77,11 @@ func registerChecker(server *mcpsdk.Server, c checker.Checker) {
 		var result ToolOutput
 		if requiresRouter {
 			result = buildToolOutput(router, buf)
+			populateServices(&result, router)
 		} else {
 			result = buildStandaloneOutput(buf)
 		}
 		result.Summary = fmt.Sprintf("%s: found %d issues", checkerName, len(result.Issues))
-		populateServices(&result, router)
 
 		return textResult(result)
 	})
@@ -94,8 +96,11 @@ func registerDiscoverNetwork(server *mcpsdk.Server, cfg ServerConfig) {
 	}, func(ctx context.Context, req *mcpsdk.CallToolRequest, input ToolInput) (*mcpsdk.CallToolResult, ToolOutput, error) {
 		gatewayIP := cfg.DiscoverGateway()
 
+		gateway := &GatewayInfo{IP: gatewayIP}
+		gateway.Interfaces = discoverInterfaces()
+
 		result := ToolOutput{
-			Gateway: &GatewayInfo{IP: gatewayIP},
+			Gateway: gateway,
 		}
 
 		if gatewayIP == "" {
@@ -138,12 +143,11 @@ func registerFullScan(server *mcpsdk.Server, cfg ServerConfig) {
 				continue
 			}
 
+			checkerCfg := configFromInput(c.Name(), c.DefaultConfig(), input)
 			if c.RequiresRouter() {
-				cfg := configFromInput(c.Name(), c.DefaultConfig(), input)
-				c.Run(cfg, router, buf)
+				c.Run(checkerCfg, router, buf)
 			} else {
-				cfg := configFromInput(c.Name(), c.DefaultConfig(), input)
-				c.RunStandalone(cfg, buf)
+				c.RunStandalone(checkerCfg, buf)
 			}
 		}
 
@@ -297,4 +301,33 @@ func formatResultAsText(result ToolOutput) string {
 	}
 
 	return sb.String()
+}
+
+// discoverInterfaces returns info about non-loopback network interfaces.
+func discoverInterfaces() []NetIf {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var result []NetIf
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil || len(addrs) == 0 {
+			continue
+		}
+		var addrStrs []string
+		for _, a := range addrs {
+			addrStrs = append(addrStrs, a.String())
+		}
+		result = append(result, NetIf{
+			Name:  iface.Name,
+			Addrs: addrStrs,
+			MAC:   iface.HardwareAddr.String(),
+			Flags: iface.Flags.String(),
+		})
+	}
+	return result
 }

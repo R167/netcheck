@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"github.com/R167/netcheck/checkers/api"
 	"github.com/R167/netcheck/checkers/device"
 	"github.com/R167/netcheck/checkers/external"
 	"github.com/R167/netcheck/checkers/ipv6"
@@ -16,24 +15,38 @@ import (
 // configFromInput builds a checker-specific config by merging the MCP ToolInput
 // fields with the checker's defaults. Fields that are zero-valued in the input
 // keep their default values.
+//
+// Note: Because ToolInput uses `omitempty` booleans, callers cannot distinguish
+// "not provided" from "false". This means booleans that default to true in a
+// checker's config cannot be disabled via MCP. This is a known limitation of
+// the flat ToolInput design.
 func configFromInput(name string, defaults checker.CheckerConfig, input ToolInput) checker.CheckerConfig {
 	switch name {
 	case "web":
-		cfg := defaults.(web.WebConfig)
+		cfg, ok := defaults.(web.WebConfig)
+		if !ok {
+			return defaults
+		}
 		if input.CheckDefaultCreds {
 			cfg.CheckDefaultCreds = true
 		}
 		return cfg
 
 	case "ports":
-		cfg := defaults.(ports.PortsConfig)
+		cfg, ok := defaults.(ports.PortsConfig)
+		if !ok {
+			return defaults
+		}
 		if len(input.Ports) > 0 {
 			cfg.Ports = input.Ports
 		}
 		return cfg
 
 	case "upnp":
-		cfg := defaults.(upnp.UPnPConfig)
+		cfg, ok := defaults.(upnp.UPnPConfig)
+		if !ok {
+			return defaults
+		}
 		if input.EnumerateMappings {
 			cfg.EnumerateMappings = true
 		}
@@ -49,14 +62,20 @@ func configFromInput(name string, defaults checker.CheckerConfig, input ToolInpu
 		return cfg
 
 	case "mdns":
-		cfg := defaults.(mdns.MDNSConfig)
+		cfg, ok := defaults.(mdns.MDNSConfig)
+		if !ok {
+			return defaults
+		}
 		if input.Detailed {
 			cfg.Detailed = true
 		}
 		return cfg
 
 	case "ssdp":
-		cfg := defaults.(ssdp.SSDPConfig)
+		cfg, ok := defaults.(ssdp.SSDPConfig)
+		if !ok {
+			return defaults
+		}
 		if input.IPv4Enabled {
 			cfg.IPv4Enabled = true
 		}
@@ -69,29 +88,34 @@ func configFromInput(name string, defaults checker.CheckerConfig, input ToolInpu
 		return cfg
 
 	case "ipv6":
-		cfg := defaults.(ipv6.IPv6Config)
+		cfg, ok := defaults.(ipv6.IPv6Config)
+		if !ok {
+			return defaults
+		}
 		if input.ShowVirtual {
 			cfg.ShowVirtual = true
 		}
 		return cfg
 
 	case "device":
-		cfg := defaults.(device.DeviceConfig)
+		cfg, ok := defaults.(device.DeviceConfig)
+		if !ok {
+			return defaults
+		}
 		if input.ShowVirtual {
 			cfg.ShowVirtual = true
 		}
 		return cfg
 
 	case "external":
-		cfg := defaults.(external.ExternalConfig)
+		cfg, ok := defaults.(external.ExternalConfig)
+		if !ok {
+			return defaults
+		}
 		if input.TestProxy {
 			cfg.TestProxy = true
 		}
 		return cfg
-
-	// Checkers with empty configs: natpmp, api, starlink, routes, lldp
-	case "api":
-		return defaults.(api.APIConfig)
 
 	default:
 		return defaults

@@ -22,6 +22,8 @@ func DiscoverGateway() string {
 }
 
 // discoverFromProcRoute parses /proc/net/route to find the default gateway.
+// This only works on Linux; on macOS/Windows it returns "" and the caller
+// falls through to the UDP heuristic.
 // The gateway field is a little-endian hex-encoded IPv4 address.
 func discoverFromProcRoute() string {
 	f, err := os.Open("/proc/net/route")
