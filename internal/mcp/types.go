@@ -33,9 +33,6 @@ type ToolInput struct {
 	// External
 	TestProxy bool `json:"test_proxy,omitempty"`
 
-	// Full scan
-	Comprehensive bool `json:"comprehensive,omitempty"`
-
 	// Checkers to run (for full_scan)
 	Checkers []string `json:"checkers,omitempty"`
 }
@@ -61,7 +58,7 @@ type ToolOutput struct {
 	PortMappings []common.PortMapping `json:"port_mappings,omitempty"`
 
 	// Log is the human-readable output from the checker.
-	Log string `json:"log"`
+	Log string `json:"log,omitempty"`
 }
 
 // GatewayInfo describes the discovered network gateway.
@@ -156,7 +153,7 @@ func ServicesFromMDNS(services []common.MDNSService) []Service {
 	return out
 }
 
-// ServicesFromSDP converts SSDP services to generic Service entries.
+// ServicesFromSSDP converts SSDP services to generic Service entries.
 func ServicesFromSSDP(services []common.SSDPService) []Service {
 	out := make([]Service, len(services))
 	for i, s := range services {

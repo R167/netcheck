@@ -139,9 +139,11 @@ func registerFullScan(server *mcpsdk.Server, cfg ServerConfig) {
 			}
 
 			if c.RequiresRouter() {
-				c.Run(c.DefaultConfig(), router, buf)
+				cfg := configFromInput(c.Name(), c.DefaultConfig(), input)
+				c.Run(cfg, router, buf)
 			} else {
-				c.RunStandalone(c.DefaultConfig(), buf)
+				cfg := configFromInput(c.Name(), c.DefaultConfig(), input)
+				c.RunStandalone(cfg, buf)
 			}
 		}
 
