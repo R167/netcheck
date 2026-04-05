@@ -5,6 +5,7 @@ import (
 	"github.com/R167/netcheck/checkers/common"
 	"github.com/R167/netcheck/checkers/device"
 	"github.com/R167/netcheck/checkers/external"
+	"github.com/R167/netcheck/checkers/identify"
 	"github.com/R167/netcheck/checkers/ipv6"
 	"github.com/R167/netcheck/checkers/lldp"
 	"github.com/R167/netcheck/checkers/mdns"
@@ -38,6 +39,7 @@ func AllCheckers() []checker.Checker {
 		ssdp.NewSSDPChecker(),
 		api.NewAPIChecker(),
 		starlink.NewStarlinkChecker(),
+		identify.NewIdentifyChecker(),
 
 		// Standalone checkers (don't require router access)
 		routes.NewRoutesChecker(),
