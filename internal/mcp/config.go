@@ -3,6 +3,7 @@ package mcp
 import (
 	"github.com/R167/netcheck/checkers/device"
 	"github.com/R167/netcheck/checkers/external"
+	"github.com/R167/netcheck/checkers/identify"
 	"github.com/R167/netcheck/checkers/ipv6"
 	"github.com/R167/netcheck/checkers/mdns"
 	"github.com/R167/netcheck/checkers/ports"
@@ -114,6 +115,16 @@ func configFromInput(name string, defaults checker.CheckerConfig, input ToolInpu
 		}
 		if input.TestProxy {
 			cfg.TestProxy = true
+		}
+		return cfg
+
+	case "identify":
+		cfg, ok := defaults.(identify.IdentifyConfig)
+		if !ok {
+			return defaults
+		}
+		if len(input.Ports) > 0 {
+			cfg.Ports = input.Ports
 		}
 		return cfg
 

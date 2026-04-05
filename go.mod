@@ -1,8 +1,9 @@
 module github.com/R167/netcheck
 
-go 1.25.1
+go 1.26.1
 
 require (
+	github.com/endobit/oui v0.7.0
 	github.com/hashicorp/mdns v1.0.6
 	github.com/modelcontextprotocol/go-sdk v0.6.0
 	golang.org/x/text v0.29.0
