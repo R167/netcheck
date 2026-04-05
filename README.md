@@ -29,6 +29,7 @@ A comprehensive network gateway security assessment tool for identifying vulnera
 | **Device Info** | `--device` | 🔧 | Shows network interface and device information |
 | **External IP** | `--external` | 🔧 | Discovers external IPv4/IPv6 addresses |
 | **LLDP Discovery** | `--lldp` | 🔧 | Link Layer Discovery Protocol analysis |
+| **Host Identification** | `--identify` | 🔧 | Identify remote hosts via ARP/OUI, nmap service detection, and HTTP fingerprinting |
 
 ### Special Flags
 
